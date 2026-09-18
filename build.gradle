@@ -130,3 +130,26 @@ publishing {
 		}
 	}
 }
+
+
+/*
+ * Isolated Minecraft 26.3 client rendering verification.
+ * Enabled only in CI with -Pschematic_preview_test and never included in the release jar.
+ */
+if (providers.gradleProperty("schematic_preview_test").isPresent()) {
+    dependencies {
+        implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    }
+
+    fabricApi {
+        configureTests {
+            createSourceSet = true
+            modId = "litematica-preview-test"
+            enableGameTests = false
+            enableClientGameTests = true
+        }
+    }
+
+    sourceSets.gametest.java.setSrcDirs(["src/previewTest/java"])
+    sourceSets.gametest.resources.setSrcDirs(["src/previewTest/resources"])
+}

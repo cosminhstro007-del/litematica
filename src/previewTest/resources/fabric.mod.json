@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "litematica-preview-test",
+  "version": "1.0.0",
+  "name": "Litematica 26.3 schematic preview verification",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-client-gametest": [
+      "fi.dy.masa.litematica.gametest.SchematicPreview26_3GameTest"
+    ]
+  },
+  "depends": {
+    "litematica": "*",
+    "minecraft": "26.3",
+    "fabric-api": "*"
+  }
+}
