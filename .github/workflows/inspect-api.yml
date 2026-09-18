@@ -21,12 +21,11 @@ jobs:
           mkdir -p render-proof
           jarfile=$(find .gradle/loom-cache/minecraftMaven -name '*.jar' | grep '26.3' | grep 'merged' | head -n 1)
           echo "$jarfile" > render-proof/jar.txt
+          javap -p -c -classpath "$jarfile" net.minecraft.client.renderer.LevelRenderer > render-proof/LevelRenderer.txt
           javap -p -c -classpath "$jarfile" net.minecraft.client.renderer.chunk.ChunkSectionsToRender > render-proof/ChunkSectionsToRender.txt
           javap -p -c -classpath "$jarfile" net.minecraft.client.renderer.chunk.ChunkSectionLayer > render-proof/ChunkSectionLayer.txt
           javap -p -c -classpath "$jarfile" net.minecraft.client.renderer.RenderPipelines > render-proof/RenderPipelines.txt
-          jar tf "$jarfile" | grep 'assets/minecraft/shaders' > render-proof/shader-list.txt || true
-          cat render-proof/ChunkSectionsToRender.txt
-          cat render-proof/ChunkSectionLayer.txt
+          grep -n -A220 -B20 'executeOit\|executeOutline\|executeSolid\|executeClassicTransparency' render-proof/LevelRenderer.txt || true
       - uses: actions/upload-artifact@v6
         with:
           name: render-proof
