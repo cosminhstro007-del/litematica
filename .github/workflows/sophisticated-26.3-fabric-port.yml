@@ -177,6 +177,72 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean compileJava processResources --stacktrace
 
+      - name: Inspect Minecraft 26.3 model API
+        if: always()
+        shell: bash
+        run: |
+          jarfile="$(find sfl-src/.gradle ~/.gradle/caches -type f -name '*.jar' 2>/dev/null | grep -E 'minecraft.*26\.3|26\.3.*minecraft' | head -1 || true)"
+          echo "Minecraft jar: $jarfile"
+          if [ -n "$jarfile" ]; then
+            echo "=== block/model ==="
+            jar tf "$jarfile" | grep -E '^net/minecraft/client/(renderer/block/model|resources/model|renderer/item)/.*\.class        run: |
+          ./gradlew build -x test --stacktrace
+          find build/libs -maxdepth 1 -type f -ls
+
+      - name: Collect jar
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p out
+          find sfl-src/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' -exec cp {} out/ \; || true
+
+      - name: Upload Sophisticated Fabric Lib
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: SophisticatedFabricLib-26.3
+          path: out/
+ | head -1200 || true
+            echo "=== spawn ==="
+            jar tf "$jarfile" | grep -E '^net/minecraft/world/entity/.*(Spawn|spawn).*\.class        run: |
+          ./gradlew build -x test --stacktrace
+          find build/libs -maxdepth 1 -type f -ls
+
+      - name: Collect jar
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p out
+          find sfl-src/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' -exec cp {} out/ \; || true
+
+      - name: Upload Sophisticated Fabric Lib
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: SophisticatedFabricLib-26.3
+          path: out/
+ | head -300 || true
+            echo "=== loot condition ==="
+            jar tf "$jarfile" | grep -E '^net/minecraft/world/level/storage/loot/.*(Condition|Predicate|predicate).*\.class        run: |
+          ./gradlew build -x test --stacktrace
+          find build/libs -maxdepth 1 -type f -ls
+
+      - name: Collect jar
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p out
+          find sfl-src/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' -exec cp {} out/ \; || true
+
+      - name: Upload Sophisticated Fabric Lib
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: SophisticatedFabricLib-26.3
+          path: out/
+ | head -300 || true
+          fi
+
       - name: Build Sophisticated Fabric Lib 26.3
         working-directory: sfl-src
         run: |
