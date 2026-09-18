@@ -260,3 +260,55 @@ for jf in java_root.rglob("*.java"):
         jf.write_text(new)
 
 print("Applied ClickType -> ContainerInput migration.")
+
+
+# Additional 26.3 renames confirmed against current sources.
+prediction_files = [
+    "net/p3pp3rf1y/sophisticatedcore/compat/rei/REICompat.java",
+    "net/p3pp3rf1y/sophisticatedcore/compat/jei/CraftingContainerRecipeTransferHandlerServer.java",
+    "net/p3pp3rf1y/sophisticatedcore/common/gui/StorageContainerMenuBase.java",
+    "net/p3pp3rf1y/sophisticatedcore/util/InventoryHelper.java",
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/infinity/InfinityUpgradeItem.java",
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/crafting/CraftingUpgradeContainer.java",
+    "com/github/salandora/sophisticatedfabriclib/transfer/api/v1/ItemStackHandler.java",
+    "com/github/salandora/sophisticatedfabriclib/transfer/api/v1/TransferUtil.java",
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/tank/TankClickPayload.java",
+    "com/github/salandora/sophisticatedfabriclib/util/Capabilities.java",
+]
+for rel in prediction_files:
+    jf = java_root / rel
+    if jf.exists():
+        txt = jf.read_text(errors="ignore")
+        txt = txt.replace("net.minecraft.world.entity.Prediction", "net.minecraft.util.Prediction")
+        jf.write_text(txt)
+
+location_files = [
+    "net/p3pp3rf1y/sophisticatedcore/init/ModPayloads.java",
+    "com/github/salandora/sophisticatedfabriclib/util/DeferredRegister.java",
+    "com/github/salandora/sophisticatedfabriclib/util/DeferredHolder.java",
+    "net/p3pp3rf1y/sophisticatedcore/init/ModFluids.java",
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/crafting/CraftingItemHandler.java",
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/FilterLogicContainerBase.java",
+    "com/github/salandora/sophisticatedfabriclib/fluid/api/v1/FluidStack.java",
+]
+for rel in location_files:
+    jf = java_root / rel
+    if jf.exists():
+        txt = jf.read_text(errors="ignore")
+        jf.write_text(txt.replace(".location()", ".identifier()"))
+
+normal_files = [
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/feeding/FeedingUpgradeWrapper.java",
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/pump/PumpUpgradeWrapper.java",
+    "net/p3pp3rf1y/sophisticatedcore/common/CommonEventHandler.java",
+    "net/p3pp3rf1y/sophisticatedcore/controller/ControllerBlockEntityBase.java",
+    "net/p3pp3rf1y/sophisticatedcore/controller/IControllerBoundable.java",
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/cooking/CookingLogic.java",
+]
+for rel in normal_files:
+    jf = java_root / rel
+    if jf.exists():
+        txt = jf.read_text(errors="ignore")
+        jf.write_text(txt.replace(".getNormal()", ".getUnitVec3i()"))
+
+print("Applied Prediction, ResourceKey.identifier and Direction.getUnitVec3i migrations.")
