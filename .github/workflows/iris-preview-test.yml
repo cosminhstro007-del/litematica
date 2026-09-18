@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers
+          sudo apt-get install -y -qq xvfb libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers openbox
           chmod +x ./gradlew
           mkdir -p run/config run/mods run/shaderpacks/ci-pack/shaders proof
 
@@ -71,12 +71,22 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: 'true'
           MESA_LOADER_DRIVER_OVERRIDE: llvmpipe
         run: |
+          Xvfb :99 -screen 0 1280x720x24 +extension GLX +render -noreset > proof/xvfb.out 2>&1 &
+          xvfb_pid=$!
+          export DISPLAY=:99
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
+          openbox --sm-disable > proof/openbox.out 2>&1 &
+          openbox_pid=$!
+          sleep 3
+
           set +e
-          timeout 100s xvfb-run -a ./gradlew runClient --no-daemon > proof/client.out 2>&1
+          timeout 100s ./gradlew runClient --no-daemon > proof/client.out 2>&1
           code=$?
           set -e
 
           cp run/logs/latest.log proof/latest.log 2>/dev/null || true
+          kill "$openbox_pid" "$xvfb_pid" 2>/dev/null || true
           tail -n 500 proof/latest.log || true
 
           if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
