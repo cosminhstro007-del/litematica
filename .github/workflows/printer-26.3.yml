@@ -105,3 +105,5 @@ jobs:
           name: litematica-printer-26.3
           path: printer-output/
           if-no-files-found: warn
+
+# standalone printer CI
