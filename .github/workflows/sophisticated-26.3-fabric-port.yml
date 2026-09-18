@@ -157,6 +157,16 @@ jobs:
               }
           }
           ''')
+          # Fabric Renderer API moved under api.client.renderer.v1 in 26.3.
+          for java_file in Path("sfl-src/src/main/java").rglob("*.java"):
+              text = java_file.read_text()
+              new = text.replace(
+                  "net.fabricmc.fabric.api.renderer.v1",
+                  "net.fabricmc.fabric.api.client.renderer.v1"
+              )
+              if new != text:
+                  java_file.write_text(new)
+
           print(Path("sfl-src/gradle.properties").read_text())
           print(Path("sfl-src/build.gradle").read_text())
           PY
