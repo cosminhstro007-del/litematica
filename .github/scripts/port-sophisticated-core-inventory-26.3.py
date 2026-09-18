@@ -175,3 +175,72 @@ if tp.exists():
     tp.write_text(s)
 
 print("Applied Fabric 26.x inventory compatibility layer.")
+
+
+# Minecraft 26.x common API migration: NBT accessors now return Optional and several Level/Recipe APIs changed.
+import re
+
+java_root = CORE / "src/main/java"
+
+# Keep these transformations deliberately limited to source files that participate in the common/runtime pass.
+for jf in java_root.rglob("*.java"):
+    txt = jf.read_text(errors="ignore")
+    new = txt
+
+    # Level accessors became methods in 26.x.
+    new = re.sub(r"\.isClientSide\b(?!\s*\()", ".isClientSide()", new)
+
+    # CompoundTag typed getters became Optional-returning accessors in 26.x.
+    new = re.sub(r'\.contains\(([^,\n]+),\s*Tag\.TAG_[A-Z_]+\)', r'.contains(\1)', new)
+    new = re.sub(r'\.getList\(([^,\n]+),\s*Tag\.TAG_[A-Z_]+\)', r'.getList(\1).orElseGet(ListTag::new)', new)
+
+    # Add defaults only when the call isn't already followed by Optional handling.
+    new = re.sub(r'(\.getInt\([^()\n]*\))(?!\s*\.)', r'\1.orElse(0)', new)
+    new = re.sub(r'(\.getLong\([^()\n]*\))(?!\s*\.)', r'\1.orElse(0L)', new)
+    new = re.sub(r'(\.getBoolean\([^()\n]*\))(?!\s*\.)', r'\1.orElse(false)', new)
+    new = re.sub(r'(\.getString\([^()\n]*\))(?!\s*\.)', r'\1.orElse("")', new)
+    new = re.sub(r'(\.getCompound\([^()\n]*\))(?!\s*\.)', r'\1.orElseGet(CompoundTag::new)', new)
+
+    # Recipe#assemble no longer takes RegistryAccess in 26.x.
+    new = new.replace(
+        "assemble(craftingInventory.asCraftInput(), w.registryAccess())",
+        "assemble(craftingInventory.asCraftInput())",
+    )
+    new = new.replace(
+        "assemble(craftingInventory.asCraftInput(), level.registryAccess())",
+        "assemble(craftingInventory.asCraftInput())",
+    )
+
+    # LivingEntity#drop gained Prediction.
+    new = re.sub(
+        r'player\.drop\(([^,\n]+),\s*(true|false)\)',
+        r'player.drop(\1, \2, net.minecraft.world.entity.Prediction.SERVER_ONLY)',
+        new,
+    )
+    new = re.sub(
+        r'player\.drop\(([^,\n]+),\s*(true|false),\s*(true|false)\)',
+        r'player.drop(\1, \2, net.minecraft.world.entity.Prediction.SERVER_ONLY)',
+        new,
+    )
+
+    if new != txt:
+        jf.write_text(new)
+
+# Level.random became getRandom(); only touch files that javac identified for this migration.
+random_files = [
+    "net/p3pp3rf1y/sophisticatedcore/fluid/FluidUtil.java",
+    "net/p3pp3rf1y/sophisticatedcore/util/LootHelper.java",
+    "net/p3pp3rf1y/sophisticatedcore/util/InventoryHelper.java",
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/jukebox/JukeboxUpgradeRenderer.java",
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/magnet/MagnetUpgradeWrapper.java",
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/cooking/CookingUpgradeRenderer.java",
+    "net/p3pp3rf1y/sophisticatedcore/mixin/common/HopperBlockEntityMixin.java",
+    "com/github/salandora/sophisticatedfabriclib/fluid/api/v1/FluidUtil.java",
+]
+for rel in random_files:
+    jf = java_root / rel
+    if jf.exists():
+        txt = jf.read_text(errors="ignore")
+        jf.write_text(re.sub(r"\.random\b", ".getRandom()", txt))
+
+print("Applied Minecraft 26.x NBT/Level/drop/recipe compatibility patches.")
