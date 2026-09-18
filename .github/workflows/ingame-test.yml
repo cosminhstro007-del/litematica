@@ -16,18 +16,65 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
-      - name: Prepare display
+      - name: Prepare
         shell: bash
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb xdotool imagemagick mesa-utils libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers openbox x11-utils wmctrl
+          sudo apt-get install -y -qq xvfb mesa-utils libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers
           chmod +x ./gradlew
+          mkdir -p ingame-proof run
 
-      - name: Launch and drive Minecraft
+      - name: Generate a real 26.3 world
         shell: bash
         run: |
-          set -u
-          mkdir -p ingame-proof
+          cat > run/eula.txt <<'EOF'
+          eula=true
+          EOF
+
+          cat > run/server.properties <<'EOF'
+          level-name=saves/LitematicaTest
+          online-mode=false
+          view-distance=2
+          simulation-distance=2
+          max-tick-time=0
+          spawn-protection=0
+          gamemode=creative
+          difficulty=peaceful
+          EOF
+
+          ./gradlew runServer --stacktrace > ingame-proof/server.out 2>&1 &
+          server_pid=$!
+
+          ready=0
+          for i in $(seq 1 120); do
+            if [ -f run/saves/LitematicaTest/level.dat ] && grep -q "Done (" ingame-proof/server.out 2>/dev/null; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          test "$ready" -eq 1
+          test -f run/saves/LitematicaTest/level.dat
+
+          kill "$server_pid" 2>/dev/null || true
+          pkill -f 'KnotServer' 2>/dev/null || true
+          sleep 2
+
+      - name: Enter the world with Minecraft client
+        shell: bash
+        run: |
+          cat > quickplay.init.gradle <<'EOF'
+          gradle.projectsEvaluated {
+              def t = gradle.rootProject.tasks.findByName("runClient")
+              if (t != null) {
+                  t.args "--quickPlaySingleplayer", "LitematicaTest", "--quickPlayPath", "quickplay/log.json"
+              }
+          }
+          EOF
 
           Xvfb :99 -screen 0 1280x720x24 +extension GLX +render -noreset > ingame-proof/xvfb.out 2>&1 &
           xvfb_pid=$!
@@ -36,92 +83,24 @@ jobs:
           export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
           sleep 2
 
-          openbox --sm-disable > ingame-proof/openbox.out 2>&1 &
-          openbox_pid=$!
-          sleep 2
-
-          ./gradlew runClient --stacktrace > ingame-proof/runclient.out 2>&1 &
-          client_pid=$!
-
-          wid=""
-          for i in $(seq 1 100); do
-            wid=$(xdotool search --name "Minecraft" 2>/dev/null | tail -n 1 || true)
-            if [ -z "$wid" ]; then
-              wid=$(xdotool search --class "Minecraft" 2>/dev/null | tail -n 1 || true)
-            fi
-            if [ -n "$wid" ] && grep -q "BlockModelCacheSchematic: refreshing model cache" run/logs/latest.log 2>/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-
-          xwininfo -root -tree > ingame-proof/window-tree-before.txt 2>&1 || true
-          wmctrl -lx > ingame-proof/wmctrl-before.txt 2>&1 || true
-          xdotool search --name ".*" getwindowname %@ > ingame-proof/window-names-before.txt 2>&1 || true
-          import -display :99 -window root ingame-proof/00-root.png || true
-
-          if [ -z "$wid" ]; then
-            echo "Minecraft window not found"
-            kill "$client_pid" "$openbox_pid" "$xvfb_pid" 2>/dev/null || true
-            exit 2
-          fi
-
-          xdotool windowactivate --sync "$wid" || true
-          xdotool windowmove "$wid" 0 0 || true
-          sleep 2
-          xdotool getwindowgeometry --shell "$wid" > ingame-proof/window-geometry.txt
-          source ingame-proof/window-geometry.txt
-          import -display :99 -window root ingame-proof/01-main-menu.png
-
-          # Main menu -> Singleplayer
-          x=$((WIDTH / 2))
-          y=$((HEIGHT / 4 + 58))
-          xdotool mousemove --window "$wid" "$x" "$y" click 1
-          sleep 4
-          import -display :99 -window root ingame-proof/02-singleplayer.png
-
-          # World list -> Create New World
-          x=$((WIDTH / 2 - 80))
-          y=$((HEIGHT - 42))
-          xdotool mousemove --window "$wid" "$x" "$y" click 1
-          sleep 4
-          import -display :99 -window root ingame-proof/03-create-world.png
-
-          # Create World screen -> Create New World
-          x=$((WIDTH / 2 - 80))
-          y=$((HEIGHT - 28))
-          xdotool mousemove --window "$wid" "$x" "$y" click 1
-          sleep 2
-
-          entered=0
-          for i in $(seq 1 120); do
-            if grep -Eiq "joined the game|Local game hosted on port" run/logs/latest.log 2>/dev/null; then
-              entered=1
-              break
-            fi
-            sleep 1
-          done
-
-          import -display :99 -window root ingame-proof/04-in-world.png || true
-
-          if [ "$entered" -eq 1 ]; then
-            xdotool windowactivate --sync "$wid" || true
-            xdotool key --window "$wid" m
-            sleep 3
-            import -display :99 -window root ingame-proof/05-litematica-menu.png || true
-          fi
+          set +e
+          timeout 100s ./gradlew -I quickplay.init.gradle runClient --stacktrace > ingame-proof/client.out 2>&1
+          client_code=$?
+          set -e
 
           cp run/logs/latest.log ingame-proof/latest.log || true
-          xwininfo -root -tree > ingame-proof/window-tree-after.txt 2>&1 || true
-          wmctrl -lx > ingame-proof/wmctrl-after.txt 2>&1 || true
-
-          kill "$client_pid" "$openbox_pid" "$xvfb_pid" 2>/dev/null || true
-
-          if [ "$entered" -ne 1 ]; then
-            echo "Did not confirm entry into a singleplayer world"
-            exit 3
+          if [ -f run/quickplay/log.json ]; then
+            cp run/quickplay/log.json ingame-proof/quickplay-log.json
           fi
 
+          kill "$xvfb_pid" 2>/dev/null || true
+
+          echo "client exit code: $client_code" | tee ingame-proof/result.txt
+          grep -E "Loading Minecraft 26\.3|litematica 0\.28\.99-dev|malilib 0\.29\.99-dev|Starting integrated minecraft server|Local game hosted on port|joined the game|Placement Manager calculated thread limit|BlockModelCacheSchematic" ingame-proof/latest.log | tee -a ingame-proof/result.txt || true
+
+          test -f ingame-proof/quickplay-log.json
+          grep -Eiq "Starting integrated minecraft server" ingame-proof/latest.log
+          grep -Eiq "Local game hosted on port|joined the game" ingame-proof/latest.log
           grep -Eiq "litematica 0\.28\.99-dev" ingame-proof/latest.log
           grep -Eiq "Placement Manager calculated thread limit" ingame-proof/latest.log
           grep -Eiq "BlockModelCacheSchematic: refreshing model cache" ingame-proof/latest.log
