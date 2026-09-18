@@ -1,0 +1,85 @@
+name: iris-26.3-schematic-pipeline-test
+
+on:
+  push:
+    branches: [ "DEV/26.3" ]
+  workflow_dispatch:
+
+jobs:
+  iris-pipeline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Prepare headless Iris runtime
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers
+          chmod +x ./gradlew
+          mkdir -p run/config run/shaderpacks/ci-pack/shaders proof
+
+          cat > run/config/iris.properties <<'EOF'
+          shaderPack=ci-pack
+          enableShaders=true
+          allowUnknownShaders=true
+          enableDebugOptions=false
+          disableUpdateMessage=true
+          EOF
+
+          cat > run/shaderpacks/ci-pack/shaders/gbuffers_basic.vsh <<'EOF'
+          #version 120
+          void main() {
+              gl_Position = ftransform();
+          }
+          EOF
+
+          cat > run/shaderpacks/ci-pack/shaders/gbuffers_basic.fsh <<'EOF'
+          #version 120
+          void main() {
+              gl_FragColor = vec4(1.0);
+          }
+          EOF
+
+      - name: Launch Minecraft with Iris and Sodium
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: 'true'
+          MESA_LOADER_DRIVER_OVERRIDE: llvmpipe
+        run: |
+          set +e
+          timeout 100s xvfb-run -a ./gradlew runClient --no-daemon -Piris_preview_test > proof/client.out 2>&1
+          code=$?
+          set -e
+
+          cp run/logs/latest.log proof/latest.log 2>/dev/null || true
+          tail -n 500 proof/latest.log || true
+
+          if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
+            echo "Client exited unexpectedly with code $code"
+            exit "$code"
+          fi
+
+          grep -Fq "Using shaderpack: ci-pack" proof/latest.log
+          grep -Fq "Iris 26.3 API detected; Litematica shader pipeline compatibility enabled" proof/latest.log
+          grep -Fq "Assigned Litematica schematic terrain pipelines to Iris shader programs" proof/latest.log
+
+          if grep -Eiq "Mixin apply failed|Could not execute entrypoint|NoSuchMethodError|NoClassDefFoundError|VerifyError|Crash report saved" proof/latest.log; then
+            echo "Fatal runtime error found"
+            exit 1
+          fi
+
+      - name: Upload Iris proof
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: iris-26.3-schematic-pipeline-proof
+          path: proof/
