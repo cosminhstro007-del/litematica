@@ -49,8 +49,10 @@ jobs:
           mkdir -p easymagic-src/deps
           jar="$(find cached-puzzles -type f -name 'PuzzlesLib-26.3-Fabric-26.3.0.jar' | head -1)"
           test -n "$jar"
-          cp "$jar" easymagic-src/deps/puzzleslib-26.3.jar
           cp "$jar" PuzzlesLib-26.3-Fabric-26.3.0.jar
+          jar uf PuzzlesLib-26.3-Fabric-26.3.0.jar -C puzzleslib-src/Common/src/main/resources puzzleslib.classtweaker
+          unzip -l PuzzlesLib-26.3-Fabric-26.3.0.jar | grep -q 'puzzleslib.classtweaker'
+          cp PuzzlesLib-26.3-Fabric-26.3.0.jar easymagic-src/deps/puzzleslib-26.3.jar
           unzip -p PuzzlesLib-26.3-Fabric-26.3.0.jar fabric.mod.json | tee puzzleslib-fabric-mod.json
           grep -q '"puzzleslib"' puzzleslib-fabric-mod.json
 
@@ -104,9 +106,9 @@ jobs:
       - name: Select Easy Magic Fabric jar
         shell: bash
         run: |
-          jar="$(find easymagic-src/Fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' ! -name '*dev*' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
+          jar="$(find easymagic-src/Fabric/build/libs -maxdepth 1 -type f -name '*+Fabric.jar' | head -1)"
           if [ -z "$jar" ]; then
-            jar="$(find easymagic-src/Fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
+            jar="$(find easymagic-src/Fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' ! -name '*javadoc*' ! -name '*dev*' | head -1)"
           fi
           test -n "$jar"
           echo "Selected: $jar"
