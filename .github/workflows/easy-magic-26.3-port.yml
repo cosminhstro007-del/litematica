@@ -63,6 +63,27 @@ jobs:
           s = s.replace("import net.minecraft.world.level.Level;\n", "")
           p.write_text(s)
           print(p.read_text())
+
+          # Minecraft 26.3 moved the player item-drop implementation away from Player.
+          # Easy Magic does not use FabricPlayerEvents.ITEM_TOSS, so remove this stale hook
+          # from the compatibility build instead of leaving a crashing mixin injection.
+          p = Path("puzzleslib-src/Fabric/src/main/java/fuzs/puzzleslib/fabric/mixin/PlayerFabricMixin.java")
+          s = p.read_text()
+          start = s.index('    @Inject(method = "drop"')
+          end = s.index('    @ModifyReturnValue(method = "getDestroySpeed"', start)
+          s = s[:start] + s[end:]
+          p.write_text(s)
+          print(p.read_text())
+
+          # Minecraft 26.3 adds ServerLevel to LivingEntity#getVisibilityPercent.
+          p = Path("puzzleslib-src/Fabric/src/main/java/fuzs/puzzleslib/fabric/mixin/LivingEntityFabricMixin.java")
+          s = p.read_text()
+          s = s.replace(
+              "public double getVisibilityPercent(double visibilityPercent, @Nullable Entity targetingEntity) {",
+              "public double getVisibilityPercent(double visibilityPercent, ServerLevel level, @Nullable Entity targetingEntity) {"
+          )
+          p.write_text(s)
+          print(p.read_text())
           PY
 
       - name: Remove Puzzles datagen-only APIs not yet ported to 26.3
