@@ -167,6 +167,13 @@ jobs:
               if new != text:
                   java_file.write_text(new)
 
+          # Minecraft 26.x unrolled loot condition types: registries store MapCodec directly.
+          p = Path("sfl-src/src/main/java/com/github/salandora/sophisticatedfabriclib/loot/api/v1/LootTableIdCondition.java")
+          s = p.read_text()
+          s = s.replace("import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType;\n", "")
+          s = s.replace("public static final LootItemConditionType LOOT_TABLE_ID = new LootItemConditionType(CODEC);", "public static final MapCodec<LootTableIdCondition> LOOT_TABLE_ID = CODEC;")
+          s = s.replace("public LootItemConditionType getType() {\n\t\treturn LOOT_TABLE_ID;\n\t}", "public MapCodec<LootTableIdCondition> codec() {\n\t\treturn CODEC;\n\t}")
+          p.write_text(s)
           print(Path("sfl-src/gradle.properties").read_text())
           print(Path("sfl-src/build.gradle").read_text())
           PY
