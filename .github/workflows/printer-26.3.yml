@@ -180,16 +180,14 @@ jobs:
 
           # 26.3 server-safety fix: rotation spoofing must not resend XYZ.
           # A rotation-only packet is sufficient and avoids invalid-movement kicks.
-          import re
           p = Path("src/main/java/me/aleksilassila/litematica/printer/actions/PrepareAction.java")
           t = p.read_text()
-          pattern = r"new ServerboundMovePlayerPacket\\.PosRot\\(\\s*player\\.getX\\(\\),\\s*player\\.getY\\(\\),\\s*player\\.getZ\\(\\),\\s*yaw,\\s*pitch,\\s*player\\.onGround\\(\\),\\s*player\\.horizontalCollision\\)"
-          replacement = """new ServerboundMovePlayerPacket.Rot(
-                        yaw, pitch, player.onGround(), player.horizontalCollision)"""
-          t, count = re.subn(pattern, replacement, t, count=1)
+          old_prefix = "new ServerboundMovePlayerPacket.PosRot(player.getX(), player.getY(), player.getZ(), yaw,"
+          new_prefix = "new ServerboundMovePlayerPacket.Rot(yaw,"
+          count = t.count(old_prefix)
           if count != 1:
-              raise SystemExit(f"Expected exactly one printer PosRot packet, replaced {count}")
-          p.write_text(t)
+              raise SystemExit(f"Expected exactly one printer PosRot prefix, found {count}")
+          p.write_text(t.replace(old_prefix, new_prefix, 1))
           
           PY
 
