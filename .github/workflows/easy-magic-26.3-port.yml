@@ -47,6 +47,15 @@ jobs:
           print(p.read_text())
           PY
 
+      - name: Remove broken 26.3 datagen-only APIs
+        shell: bash
+        run: |
+          rm -f puzzleslib-src/Common/src/main/java/fuzs/puzzleslib/common/api/client/data/v2/AbstractAtlasProvider.java
+          rm -f puzzleslib-src/Common/src/main/java/fuzs/puzzleslib/common/api/data/v2/AbstractAdvancementProvider.java
+          rm -f puzzleslib-src/Common/src/main/java/fuzs/puzzleslib/common/api/data/v2/AbstractLootProvider.java
+          rm -f puzzleslib-src/Common/src/main/java/fuzs/puzzleslib/common/api/client/data/v2/AbstractParticleProvider.java
+          rm -f puzzleslib-src/Common/src/main/java/fuzs/puzzleslib/common/api/data/v2/AbstractRecipeProvider.java
+
       - name: Build Puzzles Lib 26.3 Fabric
         working-directory: puzzleslib-src
         run: |
