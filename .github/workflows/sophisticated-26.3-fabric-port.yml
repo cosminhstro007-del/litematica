@@ -175,16 +175,70 @@ jobs:
           for jf in Path("core-src/src/main/java").rglob("*.java"):
               rel = str(jf).replace("\\\\", "/")
               txt = jf.read_text(errors="ignore")
+              client_imports = [
+                  line.strip() for line in txt.splitlines()
+                  if line.strip().startswith("import net.p3pp3rf1y.sophisticatedcore.client.")
+              ]
+              only_translation_helper = bool(client_imports) and all(
+                  "client.gui.utils.TranslationHelper" in line for line in client_imports
+              )
               if (
                   jf.name == "package-info.java"
-                  or "/client/" in rel
+                  or ("/client/" in rel and not rel.endswith("/client/gui/utils/TranslationHelper.java"))
                   or "import net.minecraft.client." in txt
                   or "import com.mojang.blaze3d." in txt
-                  or "import net.p3pp3rf1y.sophisticatedcore.client." in txt
+                  or (client_imports and not only_translation_helper)
               ):
                   client_removed.append(rel)
                   jf.unlink()
           print(f"Removed {len(client_removed)} client/package-info Java files for common migration pass")
+
+          # Replace TranslationHelper with a common-safe implementation for the common pass.
+          th = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/client/gui/utils/TranslationHelper.java")
+          th.parent.mkdir(parents=True, exist_ok=True)
+          th.write_text(
+              "package net.p3pp3rf1y.sophisticatedcore.client.gui.utils;\n\n"
+              "import net.minecraft.ChatFormatting;\n"
+              "import net.minecraft.network.chat.Component;\n"
+              "import net.minecraft.network.chat.MutableComponent;\n"
+              "import net.minecraft.world.item.Item;\n"
+              "import net.p3pp3rf1y.sophisticatedcore.SophisticatedCore;\n"
+              "import net.p3pp3rf1y.sophisticatedcore.util.RegistryHelper;\n"
+              "import java.util.List;\n\n"
+              "public class TranslationHelper {\n"
+              "  public static final String TOOLTIP_SUFFIX = \".tooltip\";\n"
+              "  public static final TranslationHelper INSTANCE = new TranslationHelper(SophisticatedCore.MOD_ID);\n"
+              "  private final String guiPrefix, guiUpgradePrefix, guiSettingsPrefix, guiStatusPrefix, buttonsPrefix, itemUpgradePrefix, blockPrefix, upgradeGroupPrefix, upgradeButtonsPrefix, upgradeControlsPrefix, keybindPrefix;\n"
+              "  public TranslationHelper(String modId) {\n"
+              "    guiPrefix=\"gui.\"+modId+\".\"; keybindPrefix=\"keybind.\"+modId+\".\"; itemUpgradePrefix=\"item.\"+modId+\".\"; blockPrefix=\"block.\"+modId+\".\"; upgradeGroupPrefix=\"upgrade_group.\"+modId+\".\"; guiUpgradePrefix=guiPrefix+\"upgrades.\"; guiSettingsPrefix=guiPrefix+\"settings.\"; guiStatusPrefix=guiPrefix+\"status.\"; buttonsPrefix=guiPrefix+\"buttons.\"; upgradeButtonsPrefix=guiUpgradePrefix+\"buttons.\"; upgradeControlsPrefix=guiUpgradePrefix+\"controls.\";\n"
+              "  }\n"
+              "  public MutableComponent translStatusMessage(String k,Object...p){return Component.translatable(guiStatusPrefix+k,p);}\n"
+              "  public MutableComponent translUpgrade(String k,Object...p){return Component.translatable(translUpgradeKey(k),p);}\n"
+              "  public Component translUpgradeSlotTooltip(String k){return Component.translatable(guiUpgradePrefix+\"slots.\"+k+TOOLTIP_SUFFIX);}\n"
+              "  public String translUpgradeKey(String k){return guiUpgradePrefix+k;}\n"
+              "  public String translBlockTooltipKey(String k){return blockPrefix+k+TOOLTIP_SUFFIX;}\n"
+              "  public String translSettings(String k){return guiSettingsPrefix+k;}\n"
+              "  public String translSettingsButton(String k){return translSettings(\"buttons.\"+k);}\n"
+              "  public String translSettingsMessage(String k){return translSettings(\"message.\"+k);}\n"
+              "  public Component translUpgradeTooltip(String k){return Component.translatable(translUpgradeKey(k)+TOOLTIP_SUFFIX);}\n"
+              "  public String translSettingsTooltip(String k){return translSettings(k)+TOOLTIP_SUFFIX;}\n"
+              "  public Component translColoredButton(String k,ChatFormatting c){return Component.translatable(translButton(k)).withStyle(c);}\n"
+              "  public String translButton(String k){return buttonsPrefix+k;}\n"
+              "  public Component translError(String k,Object...p){return Component.translatable(guiPrefix+\"error.\"+k,p);}\n"
+              "  public String translUpgradeGroup(String k){return upgradeGroupPrefix+k;}\n"
+              "  public String translUpgradeButton(String k){return upgradeButtonsPrefix+k;}\n"
+              "  public String translUpgradeControl(String k){return upgradeControlsPrefix+k;}\n"
+              "  public String translItemTooltip(Item i){return translItemTooltip(RegistryHelper.getItemKey(i).getPath());}\n"
+              "  public String translItemTooltip(String k){return itemUpgradePrefix+k+TOOLTIP_SUFFIX;}\n"
+              "  public List<Component> getTranslatedLines(String k,Object p,ChatFormatting...f){return List.of(Component.translatable(k).withStyle(f));}\n"
+              "  public List<Component> getTranslatedLines(String k){return List.of(Component.translatable(k));}\n"
+              "  public List<Component> getTranslatedLines(String k,Object p){return List.of(Component.translatable(k,p));}\n"
+              "  public String translate(String k,Object...p){return k;}\n"
+              "  public String translKeybind(String k){return keybindPrefix+k;}\n"
+              "  public String translGui(String k){return guiPrefix+k;}\n"
+              "  public String translGuiTooltip(String k){return guiPrefix.substring(0,guiPrefix.length()-1)+TOOLTIP_SUFFIX+\".\"+k;}\n"
+              "}\n"
+          )
 
           # Neutralize optional compat registration during the base/common pass.
           mc = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/init/ModCompat.java")
