@@ -53,7 +53,7 @@ jobs:
 
           p = Path("sfl-src/build.gradle")
           s = p.read_text()
-          s = s.replace("id 'fabric-loom' version '1.16.+'", "id 'fabric-loom' version '1.17.+'")
+          s = s.replace("id 'fabric-loom' version '1.16.+'", "id 'net.fabricmc.fabric-loom' version '1.17.+'")
           s = s.replace(
               """mappings(loom.layered {
                   it.officialMojangMappings()
@@ -69,14 +69,15 @@ jobs:
           s = s.replace("toolchain.languageVersion = JavaLanguageVersion.of(21)", "toolchain.languageVersion = JavaLanguageVersion.of(25)")
 
           # 26.x Loom no longer exposes the old standalone sponge-mixin artifact this dev-only
-          # hotswap block expects. It is irrelevant for CI/runtime builds, so remove it.
-          marker_start = "            try {\\n                afterEvaluate {"
-          marker_end = "            }\\n        }\\n\\n        server {"
-          if marker_start in s:
-              start = s.index(marker_start)
-              end = s.index(marker_end, start)
-              s = s[:start] + "        }\\n\\n        server {" + s[end + len(marker_end):]
-
+          # hotswap block expects. It is irrelevant for CI/runtime builds, so remove it robustly.
+          import re
+          s, removed = re.subn(
+              r'\\n            try \\{\\n                afterEvaluate \\{.*?\\n            \\} catch \\(Exception e\\) \\{\\n                println\\("\\[Error\\]: Mixin Hotswap setup failed!"\\)\\n                e\\.printStackTrace\\(\\)\\n            \\}',
+              '',
+              s,
+              flags=re.S
+          )
+          print("Removed hotswap blocks:", removed)
           p.write_text(s)
 
           print(Path("sfl-src/gradle.properties").read_text())
