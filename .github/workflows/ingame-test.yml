@@ -69,12 +69,21 @@ jobs:
         run: |
           cat >> build.gradle <<'EOF'
 
-          tasks.withType(JavaExec).configureEach {
-              if (name == "runClient") {
-                  args "--quickPlaySingleplayer", "LitematicaTest", "--quickPlayPath", "quickplay/log.json"
-                  doFirst {
-                      println "RUNCLIENT_ARGS=" + args
+          loom {
+              runs {
+                  client {
+                      client()
+                      programArg "--quickPlaySingleplayer"
+                      programArg "LitematicaTest"
+                      programArg "--quickPlayPath"
+                      programArg "quickplay/log.json"
                   }
+              }
+          }
+
+          tasks.named("runClient").configure {
+              doFirst {
+                  println "RUNCLIENT_ARGS=" + args
               }
           }
           EOF
@@ -87,7 +96,7 @@ jobs:
           sleep 2
 
           set +e
-          timeout 100s ./gradlew runClient --stacktrace > ingame-proof/client.out 2>&1
+          timeout 65s ./gradlew runClient --stacktrace > ingame-proof/client.out 2>&1
           client_code=$?
           set -e
 
