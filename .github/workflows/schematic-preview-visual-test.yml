@@ -61,31 +61,31 @@ jobs:
           s = s.replace(
               "public class ClientTickHandler implements IClientTickHandler\n{",
               """public class ClientTickHandler implements IClientTickHandler
-{
-    private static int ciPreviewTicks;
-    private static int ciPreviewStage;
-    private static fi.dy.masa.litematica.schematic.LitematicaSchematic ciPreviewSchematic;
-    private static net.minecraft.core.BlockPos ciPreviewOrigin;"""
+          {
+              private static int ciPreviewTicks;
+              private static int ciPreviewStage;
+              private static fi.dy.masa.litematica.schematic.LitematicaSchematic ciPreviewSchematic;
+              private static net.minecraft.core.BlockPos ciPreviewOrigin;"""
           )
 
           needle = """        if (mc.level != null && mc.player != null)
-        {
+                  {
             SelectionManager sm = DataManager.getSelectionManager();"""
 
           inject = """        if (mc.level != null && mc.player != null)
-        {
+                  {
             if (Boolean.getBoolean("litematica.ci.preview"))
             {
                 ciPreviewTicks++;
-
+          
                 if (ciPreviewStage == 0 && ciPreviewTicks > 40)
                 {
                     mc.player.setYRot(0.0F);
                     mc.player.setXRot(4.0F);
-
+          
                     net.minecraft.core.BlockPos playerPos = mc.player.blockPosition();
                     ciPreviewOrigin = new net.minecraft.core.BlockPos(playerPos.getX() - 3, playerPos.getY(), playerPos.getZ() + 7);
-
+          
                     net.minecraft.world.level.block.state.BlockState[] states = new net.minecraft.world.level.block.state.BlockState[] {
                         net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),
                         net.minecraft.world.level.block.Blocks.REDSTONE_BLOCK.defaultBlockState(),
@@ -95,13 +95,13 @@ jobs:
                         net.minecraft.world.level.block.Blocks.PISTON.defaultBlockState(),
                         net.minecraft.world.level.block.Blocks.IRON_BLOCK.defaultBlockState()
                     };
-
+          
                     for (int x = 0; x < states.length; x++)
                     {
                         mc.level.setBlock(ciPreviewOrigin.offset(x, 0, 0), states[x], 19);
                         mc.level.setBlock(ciPreviewOrigin.offset(x, 1, 0), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 19);
                     }
-
+          
                     mc.level.setBlock(
                         ciPreviewOrigin.offset(1, 1, 0),
                         net.minecraft.world.level.block.Blocks.REDSTONE_WIRE.defaultBlockState()
@@ -113,7 +113,7 @@ jobs:
                         net.minecraft.world.level.block.Blocks.REDSTONE_TORCH.defaultBlockState(),
                         19
                     );
-
+          
                     fi.dy.masa.litematica.selection.AreaSelection area = new fi.dy.masa.litematica.selection.AreaSelection();
                     area.setName("CI Preview");
                     area.setExplicitOrigin(ciPreviewOrigin);
@@ -125,7 +125,7 @@ jobs:
                         ),
                         true
                     );
-
+          
                     ciPreviewSchematic = fi.dy.masa.litematica.schematic.LitematicaSchematic.createFromWorld(
                         mc.level,
                         area,
@@ -133,7 +133,7 @@ jobs:
                         "CI",
                         message -> {}
                     );
-
+          
                     if (ciPreviewSchematic == null)
                     {
                         fi.dy.masa.litematica.Litematica.LOGGER.error("[CI-PREVIEW] Failed to create schematic");
@@ -143,13 +143,13 @@ jobs:
                     {
                         ciPreviewSchematic.getMetadata().setName("CI Preview");
                         fi.dy.masa.litematica.data.SchematicHolder.getInstance().addSchematic(ciPreviewSchematic, true);
-
+          
                         for (int x = 0; x < 7; x++)
                         {
                             mc.level.setBlock(ciPreviewOrigin.offset(x, 0, 0), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 19);
                             mc.level.setBlock(ciPreviewOrigin.offset(x, 1, 0), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 19);
                         }
-
+          
                         fi.dy.masa.litematica.schematic.placement.SchematicPlacement placement =
                             fi.dy.masa.litematica.schematic.placement.SchematicPlacement.createFor(
                                 ciPreviewSchematic, ciPreviewOrigin, "CI Preview", true, true
@@ -157,7 +157,7 @@ jobs:
                         DataManager.getSchematicPlacementManager().addSchematicPlacement(placement, false);
                         DataManager.getSchematicPlacementManager().setSelectedSchematicPlacement(placement);
                         DataManager.getSchematicPlacementManager().markAllPlacementsOfSchematicForRebuild(ciPreviewSchematic);
-
+          
                         fi.dy.masa.litematica.Litematica.LOGGER.info(
                             "[CI-PREVIEW] Created test schematic at {} with normal + redstone blocks",
                             ciPreviewOrigin
@@ -180,7 +180,7 @@ jobs:
                     ciPreviewStage = 2;
                 }
             }
-
+          
             SelectionManager sm = DataManager.getSelectionManager();"""
 
           if needle not in s:
