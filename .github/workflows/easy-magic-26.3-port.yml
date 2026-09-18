@@ -207,7 +207,10 @@ jobs:
 
           c = Path("easymagic-src/Common/build.gradle.kts")
           s = c.read_text()
-          s += "\\nsourceSets {\\n    named(\\\"main\\\") {\\n        java {\\n            exclude(\\\"fuzs/easymagic/common/data/**\\\")\\n        }\\n    }\\n}\\n"
+          s = s.replace(
+              "modCompileOnlyApi(sharedLibs.puzzleslib.common)",
+              'modCompileOnlyApi(files("../deps/puzzleslib-26.3.jar"))'
+          )
           c.write_text(s)
 
           print(p.read_text())
