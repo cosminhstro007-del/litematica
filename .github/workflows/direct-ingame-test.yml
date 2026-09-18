@@ -44,36 +44,7 @@ jobs:
       - name: Add temporary in-game GUI verifier
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path("src/main/java/fi/dy/masa/litematica/scheduler/ClientTickHandler.java")
-          s = p.read_text()
-          s = s.replace(
-              "public class ClientTickHandler implements IClientTickHandler\n{",
-              "public class ClientTickHandler implements IClientTickHandler\n{\n    private static boolean ciMenuRequested;\n    private static boolean ciMenuVerified;"
-          )
-          needle = "        if (mc.level != null && mc.player != null)\n        {"
-          repl = """        if (mc.level != null && mc.player != null)
-        {
-            if (Boolean.getBoolean("litematica.ci.ingame"))
-            {
-                if (ciMenuRequested == false)
-                {
-                    fi.dy.masa.malilib.gui.GuiBase.openGui(new fi.dy.masa.litematica.gui.GuiMainMenu());
-                    ciMenuRequested = true;
-                    fi.dy.masa.litematica.Litematica.LOGGER.info("[CI-INGAME] Requested Litematica main menu in singleplayer world");
-                }
-                else if (ciMenuVerified == false && mc.gui.screen() instanceof fi.dy.masa.litematica.gui.GuiMainMenu)
-                {
-                    ciMenuVerified = true;
-                    fi.dy.masa.litematica.Litematica.LOGGER.info("[CI-INGAME] VERIFIED Litematica GuiMainMenu open in singleplayer world");
-                }
-            }"""
-          if needle not in s:
-              raise SystemExit("tick insertion point not found")
-          s = s.replace(needle, repl, 1)
-          p.write_text(s)
-          PY
+          python3 -c 'from pathlib import Path; p=Path("src/main/java/fi/dy/masa/litematica/scheduler/ClientTickHandler.java"); s=p.read_text(); s=s.replace("public class ClientTickHandler implements IClientTickHandler\\n{","public class ClientTickHandler implements IClientTickHandler\\n{\\n    private static boolean ciMenuRequested;\\n    private static boolean ciMenuVerified;"); needle="        if (mc.level != null && mc.player != null)\\n        {"; repl="        if (mc.level != null && mc.player != null)\\n        {\\n            if (Boolean.getBoolean(\\\"litematica.ci.ingame\\\"))\\n            {\\n                if (ciMenuRequested == false)\\n                {\\n                    fi.dy.masa.malilib.gui.GuiBase.openGui(new fi.dy.masa.litematica.gui.GuiMainMenu());\\n                    ciMenuRequested = true;\\n                    fi.dy.masa.litematica.Litematica.LOGGER.info(\\\"[CI-INGAME] Requested Litematica main menu in singleplayer world\\\");\\n                }\\n                else if (ciMenuVerified == false && mc.gui.screen() instanceof fi.dy.masa.litematica.gui.GuiMainMenu)\\n                {\\n                    ciMenuVerified = true;\\n                    fi.dy.masa.litematica.Litematica.LOGGER.info(\\\"[CI-INGAME] VERIFIED Litematica GuiMainMenu open in singleplayer world\\\");\\n                }\\n            }"; assert needle in s; p.write_text(s.replace(needle,repl,1))'
 
       - name: Launch directly into singleplayer and verify Litematica GUI
         shell: bash
