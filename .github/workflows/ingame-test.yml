@@ -20,7 +20,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb xdotool imagemagick mesa-utils libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers openbox x11-utils
+          sudo apt-get install -y -qq xvfb xdotool imagemagick mesa-utils libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers openbox x11-utils wmctrl
           chmod +x ./gradlew
 
       - name: Launch and drive Minecraft
@@ -28,6 +28,7 @@ jobs:
         run: |
           set -u
           mkdir -p ingame-proof
+
           Xvfb :99 -screen 0 1280x720x24 +extension GLX +render -noreset > ingame-proof/xvfb.out 2>&1 &
           xvfb_pid=$!
           export DISPLAY=:99
@@ -35,21 +36,32 @@ jobs:
           export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
           sleep 2
 
+          openbox --sm-disable > ingame-proof/openbox.out 2>&1 &
+          openbox_pid=$!
+          sleep 2
+
           ./gradlew runClient --stacktrace > ingame-proof/runclient.out 2>&1 &
           client_pid=$!
 
           wid=""
-          for i in $(seq 1 90); do
+          for i in $(seq 1 100); do
             wid=$(xdotool search --name "Minecraft" 2>/dev/null | tail -n 1 || true)
+            if [ -z "$wid" ]; then
+              wid=$(xdotool search --class "Minecraft" 2>/dev/null | tail -n 1 || true)
+            fi
             if [ -n "$wid" ] && grep -q "BlockModelCacheSchematic: refreshing model cache" run/logs/latest.log 2>/dev/null; then
               break
             fi
             sleep 1
           done
 
+          xwininfo -root -tree > ingame-proof/window-tree-before.txt 2>&1 || true
+          wmctrl -lx > ingame-proof/wmctrl-before.txt 2>&1 || true
+          xdotool search --name ".*" getwindowname %@ > ingame-proof/window-names-before.txt 2>&1 || true
+          import -display :99 -window root ingame-proof/00-root.png || true
+
           if [ -z "$wid" ]; then
             echo "Minecraft window not found"
-            xwininfo -root -tree > ingame-proof/window-tree.txt 2>&1 || true\n            xdotool search --name ".*" getwindowname %@ > ingame-proof/window-names.txt 2>&1 || true
             kill "$client_pid" "$openbox_pid" "$xvfb_pid" 2>/dev/null || true
             exit 2
           fi
@@ -61,21 +73,21 @@ jobs:
           source ingame-proof/window-geometry.txt
           import -display :99 -window root ingame-proof/01-main-menu.png
 
-          # Title screen: Singleplayer is the first large centered button.
+          # Main menu -> Singleplayer
           x=$((WIDTH / 2))
           y=$((HEIGHT / 4 + 58))
           xdotool mousemove --window "$wid" "$x" "$y" click 1
           sleep 4
           import -display :99 -window root ingame-proof/02-singleplayer.png
 
-          # World list screen: Create New World button (bottom-left of the centered button row).
+          # World list -> Create New World
           x=$((WIDTH / 2 - 80))
           y=$((HEIGHT - 42))
           xdotool mousemove --window "$wid" "$x" "$y" click 1
           sleep 4
           import -display :99 -window root ingame-proof/03-create-world.png
 
-          # Create World screen: click the create button at the bottom-left.
+          # Create World screen -> Create New World
           x=$((WIDTH / 2 - 80))
           y=$((HEIGHT - 28))
           xdotool mousemove --window "$wid" "$x" "$y" click 1
@@ -83,27 +95,27 @@ jobs:
 
           entered=0
           for i in $(seq 1 120); do
-            if grep -Eiq "joined the game|Local game hosted on port|Starting integrated minecraft server" run/logs/latest.log 2>/dev/null; then
+            if grep -Eiq "joined the game|Local game hosted on port" run/logs/latest.log 2>/dev/null; then
               entered=1
-            fi
-            if [ "$entered" -eq 1 ] && grep -Eiq "joined the game|Local game hosted on port" run/logs/latest.log 2>/dev/null; then
               break
             fi
             sleep 1
           done
 
-          import -display :99 -window root ingame-proof/04-in-world.png
+          import -display :99 -window root ingame-proof/04-in-world.png || true
 
-          # Litematica default main-menu hotkey.
-          xdotool windowactivate --sync "$wid" || true
-          xdotool key --window "$wid" m
-          sleep 3
-          import -display :99 -window root ingame-proof/05-litematica-menu.png
+          if [ "$entered" -eq 1 ]; then
+            xdotool windowactivate --sync "$wid" || true
+            xdotool key --window "$wid" m
+            sleep 3
+            import -display :99 -window root ingame-proof/05-litematica-menu.png || true
+          fi
 
           cp run/logs/latest.log ingame-proof/latest.log || true
-          xwininfo -root -tree > ingame-proof/window-tree.txt 2>&1 || true
+          xwininfo -root -tree > ingame-proof/window-tree-after.txt 2>&1 || true
+          wmctrl -lx > ingame-proof/wmctrl-after.txt 2>&1 || true
 
-          kill "$client_pid" "$xvfb_pid" 2>/dev/null || true
+          kill "$client_pid" "$openbox_pid" "$xvfb_pid" 2>/dev/null || true
 
           if [ "$entered" -ne 1 ]; then
             echo "Did not confirm entry into a singleplayer world"
