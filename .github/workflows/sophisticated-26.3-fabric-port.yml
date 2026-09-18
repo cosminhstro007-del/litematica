@@ -149,6 +149,30 @@ jobs:
               if new != txt:
                   jf.write_text(new)
 
+          # Minecraft 26.3 uses official/unobfuscated class names. Update Loom injected-interface
+          # targets so ItemStack/DataComponentHolder/Slot/etc. expose the Sophisticated helper APIs at compile time.
+          fmj = Path("core-src/src/main/resources/fabric.mod.json")
+          if fmj.exists():
+              fs = fmj.read_text()
+              injected_targets = {
+                  "net/minecraft/class_465": "net/minecraft/client/gui/screens/inventory/AbstractContainerScreen",
+                  "net/minecraft/class_727": "net/minecraft/client/particle/TerrainParticle",
+                  "net/minecraft/class_1297": "net/minecraft/world/entity/Entity",
+                  "net/minecraft/class_1657": "net/minecraft/world/entity/player/Player",
+                  "net/minecraft/class_1735": "net/minecraft/world/inventory/Slot",
+                  "net/minecraft/class_1792": "net/minecraft/world/item/Item",
+                  "net/minecraft/class_1799": "net/minecraft/world/item/ItemStack",
+                  "net/minecraft/class_1937": "net/minecraft/world/level/Level",
+                  "net/minecraft/class_2248": "net/minecraft/world/level/block/Block",
+                  "net/minecraft/class_2680": "net/minecraft/world/level/block/state/BlockState",
+                  "net/minecraft/class_2586": "net/minecraft/world/level/block/entity/BlockEntity",
+                  "net/minecraft/class_9322": "net/minecraft/core/component/DataComponentHolder",
+                  "net/minecraft/class_9288": "net/minecraft/world/item/component/ItemContainerContents",
+              }
+              for old, new in injected_targets.items():
+                  fs = fs.replace(old, new)
+              fmj.write_text(fs)
+
           # Minecraft 26.3 uses the official/unobfuscated namespace in access wideners.
           aw = Path("core-src/src/main/resources/sophisticatedcore.accesswidener")
           if aw.exists():
