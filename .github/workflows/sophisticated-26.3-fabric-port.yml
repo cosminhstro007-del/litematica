@@ -227,54 +227,46 @@ jobs:
         if: always()
         shell: bash
         run: |
-          mcjar=""
-          frapijar=""
-          while IFS= read -r candidate; do
-            if [ -z "$mcjar" ] && jar tf "$candidate" 2>/dev/null | grep -q '^net/minecraft/client/Minecraft.class$'; then mcjar="$candidate"; fi
-            if [ -z "$frapijar" ] && jar tf "$candidate" 2>/dev/null | grep -q '^net/fabricmc/fabric/api/client/renderer/v1/mesh/QuadEmitter.class$'; then frapijar="$candidate"; fi
-            if [ -n "$mcjar" ] && [ -n "$frapijar" ]; then break; fi
-          done < <(find sfl-src/.gradle ~/.gradle -type f -name '*.jar' 2>/dev/null | sort -u)
+          mcjar="/home/runner/.gradle/caches/fabric-loom/26.3/minecraft-client.jar"
           echo "Minecraft jar: $mcjar"
-          echo "Fabric renderer jar: $frapijar"
-          if [ -n "$frapijar" ]; then
-            echo '=== Key Fabric renderer signatures ==='
+          echo '=== Minecraft moved/common classes ==='
+          if [ -f "$mcjar" ]; then
+            jar tf "$mcjar" | grep -E '(GuiGraphics|Tesselator|Minecart|ItemInHandRenderer|AxeItem|HoeItem|ShovelItem|DiggerItem|Tier|ToolMaterial|Ingredient|TextureSheetParticle|BlockModelShaper)[^/]*[.]class$' | sort | head -1500 || true
+            echo '=== Key common javap ==='
             for cls in \
-              net.fabricmc.fabric.api.client.renderer.v1.Renderer \
-              net.fabricmc.fabric.api.client.renderer.v1.mesh.Mesh \
-              net.fabricmc.fabric.api.client.renderer.v1.mesh.MeshView \
-              net.fabricmc.fabric.api.client.renderer.v1.mesh.MutableMesh \
-              net.fabricmc.fabric.api.client.renderer.v1.mesh.MutableQuadView \
-              net.fabricmc.fabric.api.client.renderer.v1.mesh.QuadEmitter \
-              net.fabricmc.fabric.api.client.renderer.v1.model.MeshQuadCollection \
-              net.fabricmc.fabric.api.client.renderer.v1.model.ModelHelper \
-              net.fabricmc.fabric.api.client.renderer.v1.model.FabricBlockStateModel \
-              net.fabricmc.fabric.api.client.renderer.v1.model.FabricBlockStateModelPart
-            do
-              echo "--- $cls ---"
-              javap -classpath "$frapijar:$mcjar" -public "$cls" 2>/dev/null | head -260 || true
-            done
-          fi
-          if [ -n "$mcjar" ]; then
-            echo '=== Additional Minecraft signatures ==='
-            for cls in \
-              net.minecraft.client.renderer.block.dispatch.BlockStateModelPart \
-              net.minecraft.client.renderer.block.dispatch.ModelState \
-              net.minecraft.client.resources.model.geometry.QuadCollection \
-              net.minecraft.client.resources.model.geometry.QuadCollection\$Builder \
-              net.minecraft.client.resources.model.geometry.UnbakedGeometry \
-              net.minecraft.client.resources.model.sprite.Material\$Baked \
-              net.minecraft.client.resources.model.sprite.MaterialBaker \
-              net.minecraft.client.resources.model.sprite.TextureSlots \
-              net.minecraft.client.resources.model.cuboid.ItemTransforms \
-              net.minecraft.client.resources.model.cuboid.CuboidModel \
-              net.minecraft.client.resources.model.cuboid.UnbakedCuboidGeometry \
-              net.minecraft.client.renderer.block.BlockModelRenderState \
-              net.minecraft.client.renderer.item.ModelRenderProperties
+              net.minecraft.world.item.crafting.Ingredient \
+              net.minecraft.world.entity.vehicle.minecart.AbstractMinecart \
+              net.minecraft.client.gui.GuiGraphicsExtractor \
+              net.minecraft.client.renderer.item.ItemInHandRenderer \
+              net.minecraft.world.item.tool.AxeItem \
+              net.minecraft.world.item.tool.HoeItem \
+              net.minecraft.world.item.tool.ShovelItem \
+              net.minecraft.world.item.tool.DiggerItem \
+              net.minecraft.world.item.ToolMaterial
             do
               echo "--- $cls ---"
               javap -classpath "$mcjar" -public "$cls" 2>/dev/null | head -260 || true
             done
           fi
+          echo '=== Fabric classes matching screen/fuel/lookup ==='
+          find ~/.gradle/caches/modules-2/files-2.1/net.fabricmc.fabric-api -type f -name '*.jar' 2>/dev/null | while read candidate; do
+            matches="$(jar tf "$candidate" 2>/dev/null | grep -E '(ExtendedScreenHandlerFactory|ScreenHandlerFactory|Fuel|BlockApiLookup|ServerWorldCache)' || true)"
+            if [ -n "$matches" ]; then
+              echo "--- $candidate ---"
+              echo "$matches"
+            fi
+          done
+          echo '=== Fabric common API javap ==='
+          alljars="$(find ~/.gradle/caches/modules-2/files-2.1/net.fabricmc.fabric-api -type f -name '*.jar' 2>/dev/null | paste -sd: -)"
+          for cls in \
+            net.fabricmc.fabric.api.lookup.v1.block.BlockApiLookup \
+            net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory \
+            net.fabricmc.fabric.api.registry.FuelRegistry \
+            net.fabricmc.fabric.api.registry.FuelValueEvents
+          do
+            echo "--- $cls ---"
+            javap -classpath "$alljars:$mcjar" -public "$cls" 2>/dev/null | head -260 || true
+          done
       - name: Build Sophisticated Fabric Lib 26.3
         working-directory: sfl-src
         run: |
