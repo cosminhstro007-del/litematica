@@ -968,3 +968,57 @@ if sstack.exists():
     sstack.write_text(txt)
 
 print("Ported fuel and piglin-safe item extension logic to vanilla 26.x APIs.")
+
+
+# Feeding upgrade: InteractionResultHolder was folded into InteractionResult in 26.x.
+feeding = java_root / "net/p3pp3rf1y/sophisticatedcore/upgrades/feeding/FeedingUpgradeWrapper.java"
+if feeding.exists():
+    txt = feeding.read_text(errors="ignore")
+    txt = txt.replace("import net.minecraft.world.InteractionResultHolder;\n", "")
+    txt = txt.replace("import net.minecraft.world.entity.EntityType;\n", "import net.minecraft.world.entity.EntityType;\nimport net.minecraft.world.entity.EntityTypes;\n")
+    txt = txt.replace("level.getEntities(EntityType.PLAYER,", "level.getEntities(EntityTypes.PLAYER,")
+    txt = txt.replace(
+        "if (singleItemCopy.use(level, player, InteractionHand.MAIN_HAND).getResult() == InteractionResult.CONSUME) {",
+        "if (singleItemCopy.use(level, player, InteractionHand.MAIN_HAND).consumesAction()) {"
+    )
+    old = """\t\t\t\tInteractionResultHolder<ItemStack> result = UseItemCallback.EVENT.invoker().interact(player, level, InteractionHand.MAIN_HAND);
+\t\t\t\tItemStack resultItem = result.getObject();
+\t\t\t\tif (result.getResult() == InteractionResult.PASS) {
+\t\t\t\t\tresultItem = singleItemCopy.getItem().finishUsingItem(singleItemCopy, level, player);
+\t\t\t\t}
+"""
+    new = """\t\t\t\tInteractionResult result = UseItemCallback.EVENT.invoker().interact(player, level, InteractionHand.MAIN_HAND);
+\t\t\t\tItemStack resultItem = singleItemCopy;
+\t\t\t\tif (result instanceof InteractionResult.Success success && success.heldItemTransformedTo() != null) {
+\t\t\t\t\tresultItem = success.heldItemTransformedTo();
+\t\t\t\t} else if (result == InteractionResult.PASS) {
+\t\t\t\t\tresultItem = singleItemCopy.getItem().finishUsingItem(singleItemCopy, level, player);
+\t\t\t\t}
+"""
+    txt = txt.replace(old, new)
+    feeding.write_text(txt)
+
+# Cooking: Fabric FuelRegistry was removed. Vanilla 26.x exposes FuelValues on the server.
+cooking = java_root / "net/p3pp3rf1y/sophisticatedcore/upgrades/cooking/CookingLogic.java"
+if cooking.exists():
+    txt = cooking.read_text(errors="ignore")
+    txt = txt.replace("import net.fabricmc.fabric.api.registry.FuelRegistry;\n", "")
+    if "import net.p3pp3rf1y.sophisticatedcore.SophisticatedCore;" not in txt:
+        txt = txt.replace(
+            "import net.p3pp3rf1y.sophisticatedcore.init.ModCoreDataComponents;\n",
+            "import net.p3pp3rf1y.sophisticatedcore.SophisticatedCore;\nimport net.p3pp3rf1y.sophisticatedcore.init.ModCoreDataComponents;\n"
+        )
+    txt = txt.replace(
+        "return (int) (Objects.requireNonNullElse(FuelRegistry.INSTANCE.get(fuel.getItem()), 0) * burnTimeModifier);",
+        "var server = SophisticatedCore.getCurrentServer();\n\t\treturn server == null ? 0 : (int) (server.fuelValues().burnDuration(fuel) * burnTimeModifier);"
+    )
+    cooking.write_text(txt)
+
+# Fabric Networking 26.x renamed createS2CPacket -> createClientboundPacket.
+packet = java_root / "net/p3pp3rf1y/sophisticatedcore/network/PacketDistributor.java"
+if packet.exists():
+    txt = packet.read_text(errors="ignore")
+    txt = txt.replace("ServerPlayNetworking.createS2CPacket", "ServerPlayNetworking.createClientboundPacket")
+    packet.write_text(txt)
+
+print("Ported feeding InteractionResult, cooking FuelValues, and networking packet creation to 26.x.")
