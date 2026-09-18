@@ -7,18 +7,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  port-sophisticated-fabric-lib:
+  port-core:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout harness
         uses: actions/checkout@v6
-
-      - name: Checkout Sophisticated Fabric Lib dev
-        uses: actions/checkout@v6
-        with:
-          repository: Salandora/SophisticatedFabricLib
-          ref: 1.21.1-fabric-dev
-          path: sfl-src
 
       - name: Checkout Sophisticated Core Fabric dev
         uses: actions/checkout@v6
@@ -26,32 +19,6 @@ jobs:
           repository: Salandora/SophisticatedCore
           ref: 1.21.x-fabric-dev
           path: core-src
-
-      - name: Checkout Sophisticated Backpacks Fabric dev
-        uses: actions/checkout@v6
-        with:
-          repository: Salandora/SophisticatedBackpacks
-          ref: 1.21.x-fabric-dev
-          path: backpacks-src
-
-      - name: Checkout Sophisticated Storage Fabric dev
-        uses: actions/checkout@v6
-        with:
-          repository: Salandora/SophisticatedStorage
-          ref: 1.21.x-fabric-dev
-          path: storage-src
-
-      - name: Audit Fabric compatibility dependencies
-        shell: bash
-        run: |
-          for dir in core-src backpacks-src storage-src; do
-            echo "===== $dir Porting Lib imports ====="
-            grep -RhoE 'import io[.]github[.]fabricators_of_create[.]porting_lib[^;]*;' "$dir/src" 2>/dev/null | sort -u || true
-            echo "===== $dir SFL imports ====="
-            grep -RhoE 'import com[.]github[.]salandora[.]sophisticatedfabriclib[^;]*;' "$dir/src" 2>/dev/null | sort -u || true
-            echo "===== $dir extension calls ====="
-            grep -RhoE 'sophisticatedFabricLibrary_[A-Za-z0-9_]+' "$dir/src" 2>/dev/null | sort -u || true
-          done
 
       - name: Setup Java 25
         uses: actions/setup-java@v5
@@ -62,260 +29,74 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      - name: Port build metadata to Minecraft 26.3
+      - name: Port Core build metadata to Minecraft 26.3
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
-          p = Path("sfl-src/gradle.properties")
+          p = Path("core-src/gradle.properties")
           s = p.read_text()
           replacements = {
               "parchment_minecraft_version=1.21": "parchment_minecraft_version=26.3",
               "parchment_mappings_version=2024.11.10": "parchment_mappings_version=unused",
               "minecraft_version=1.21.1": "minecraft_version=26.3",
-              "fabric_version=0.116.12+1.21.1": "fabric_version=0.160.6+26.3",
-              "loader_version=0.19.2": "loader_version=0.19.5",
+              "fabric_version=0.114.0+1.21.1": "fabric_version=0.160.6+26.3",
+              "loader_version=0.16.9": "loader_version=0.19.5",
+              "mixin_extras_version = 0.5.0-beta.3": "mixin_extras_version = 0.5.5",
+              "forge_config_api_port_version = 21.1.3": "forge_config_api_port_version = 26.3.0",
               "energy_version = 4.1.0": "energy_version = 5.0.0",
-              "curseforge_minecraft_versions=1.21.1": "curseforge_minecraft_versions=26.3",
-              "modrinth_minecraft_versions=1.21.1": "modrinth_minecraft_versions=26.3",
+              "release_versions=1.21.1": "release_versions=26.3",
           }
-          for old, new in replacements.items():
-              s = s.replace(old, new)
+          for old,new in replacements.items():
+              s=s.replace(old,new)
           p.write_text(s)
 
-          aw = Path("sfl-src/src/main/resources/sophisticatedfabriclib.accesswidener")
-          aws = aw.read_text()
-          aws = aws.replace("accessWidener v2 named", "accessWidener v2 official")
-          aw.write_text(aws)
-          print("26.3 access widener:")
-          print(aw.read_text())
-
-          # Minecraft 26.x renamed ResourceLocation to Identifier in official names.
-          java_root = Path("sfl-src/src/main/java")
-          changed = 0
-          for jp in java_root.rglob("*.java"):
-              js = jp.read_text()
-              ns = js.replace("net.minecraft.resources.ResourceLocation", "net.minecraft.resources.Identifier")
-              ns = ns.replace("ResourceLocation", "Identifier")
-              if ns != js:
-                  jp.write_text(ns)
-                  changed += 1
-          print("Identifier migration touched Java files:", changed)
-
-          p = Path("sfl-src/build.gradle")
-          p.write_text(r'''plugins {
-              id 'net.fabricmc.fabric-loom' version '1.17.+'
-              id 'maven-publish'
-          }
-
-          repositories {
-              mavenCentral()
-              maven { url = "https://maven.fabricmc.net/" }
-          }
-
-          group = project.maven_group
-          version = "${project.minecraft_version}-${project.mod_version}.26.3-port"
-
-          base {
-              archivesName = project.mod_id
-          }
-
-          loom {
-              runtimeOnlyLog4j = true
-              accessWidenerPath = file("src/main/resources/${project.mod_id}.accesswidener")
-
-              mods {
-                  "${project.mod_id}" {
-                      sourceSet sourceSets.main
-                  }
-              }
-
-              runs {
-                  client {
-                      client()
-                      runDir "run/${project.minecraft_version}"
-                  }
-                  server {
-                      server()
-                      runDir "run/${project.minecraft_version}"
-                  }
-              }
-          }
-
-          dependencies {
-              minecraft "com.mojang:minecraft:${project.minecraft_version}"
-              implementation "net.fabricmc:fabric-loader:${project.loader_version}"
-              implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
-              implementation "teamreborn:energy:${project.energy_version}"
-
-              implementation "javax.annotation:javax.annotation-api:1.3.2"
-              implementation "com.google.code.findbugs:jsr305:3.0.2"
-          }
-
-          processResources {
-              inputs.property "version", project.version
-              inputs.property "minecraft_version", project.minecraft_version
-              inputs.property "loader_version", project.loader_version
-              inputs.property "fabric_version", project.fabric_version
-              inputs.property "energy_version", project.energy_version
-              filteringCharset = "UTF-8"
-
-              filesMatching("fabric.mod.json") {
-                  expand "version": inputs.properties.version,
-                          "minecraft_version": inputs.properties.minecraft_version,
-                          "loader_version": inputs.properties.loader_version,
-                          "fabric_version": inputs.properties.fabric_version,
-                          "energy_version": inputs.properties.energy_version
-              }
-          }
-
-          tasks.withType(JavaCompile).configureEach {
-              options.encoding = "UTF-8"
-              options.release = 25
-          }
-
-          java {
-              toolchain.languageVersion = JavaLanguageVersion.of(25)
-              sourceCompatibility = JavaVersion.VERSION_25
-              targetCompatibility = JavaVersion.VERSION_25
-              withSourcesJar()
-          }
-
-          jar {
-              if (file("LICENSE").exists()) {
-                  from("LICENSE") {
-                      rename { "${it}_${project.mod_id}" }
-                  }
-              }
-          }
-          ''')
-          # Fabric Renderer API moved under api.client.renderer.v1 in 26.3.
-          for java_file in Path("sfl-src/src/main/java").rglob("*.java"):
-              text = java_file.read_text()
-              new = text.replace(
-                  "net.fabricmc.fabric.api.renderer.v1",
-                  "net.fabricmc.fabric.api.client.renderer.v1"
-              )
-              if new != text:
-                  java_file.write_text(new)
-
-          # Minecraft 26.x unrolled loot condition types: registries store MapCodec directly.
-          p = Path("sfl-src/src/main/java/com/github/salandora/sophisticatedfabriclib/loot/api/v1/LootTableIdCondition.java")
-          s = p.read_text()
-          s = s.replace("import net.minecraft.world.level.storage.loot.predicates.LootItemConditionType;\n", "")
-          s = s.replace("public static final LootItemConditionType LOOT_TABLE_ID = new LootItemConditionType(CODEC);", "public static final MapCodec<LootTableIdCondition> LOOT_TABLE_ID = CODEC;")
-          s = s.replace("public LootItemConditionType getType() {\n\t\treturn LOOT_TABLE_ID;\n\t}", "public MapCodec<LootTableIdCondition> codec() {\n\t\treturn CODEC;\n\t}")
+          p=Path("core-src/build.gradle")
+          s=p.read_text()
+          s=s.replace("id 'fabric-loom' version '1.10.+'", "id 'fabric-loom' version '1.17.+'")
+          # 26.3 Loom supplies the mappings; old Parchment/official block cannot resolve 26.3.
+          s=re.sub(r'\n\s*mappings\(loom\.layered \{.*?\n\s*\}\)\n', '\n', s, flags=re.S)
+          s=s.replace("it.options.release = 21", "it.options.release = 25")
+          s=s.replace("sourceCompatibility = JavaVersion.VERSION_21", "sourceCompatibility = JavaVersion.VERSION_25")
+          s=s.replace("targetCompatibility = JavaVersion.VERSION_21", "targetCompatibility = JavaVersion.VERSION_25")
+          s=s.replace("languageVersion = JavaLanguageVersion.of(21)", "languageVersion = JavaLanguageVersion.of(25)")
+          # Porting Lib has no 26.3 artifacts. Remove dependency loop; target-specific shims are added next.
+          s=re.sub(r'\n\s*for \(def module in porting_lib_modules\.split\(\',\'\)\) \{.*?\n\s*\}\n', '\n', s, count=1, flags=re.S)
+          # Ask javac for the complete migration surface instead of stopping at 100 errors.
+          s += "\n\ntasks.withType(JavaCompile).configureEach { options.compilerArgs += ['-Xmaxerrs', '2000'] }\n"
           p.write_text(s)
-          # MobSpawnType was renamed to EntitySpawnReason in vanilla.
-          for rel in [
-              "event/api/v1/common/MobSpawnEvents.java",
-              "event/mixin/v1/common/MobMixin_FinalizeSpawn.java",
-          ]:
-              p = Path("sfl-src/src/main/java/com/github/salandora/sophisticatedfabriclib") / rel
-              s = p.read_text().replace("MobSpawnType", "EntitySpawnReason")
-              p.write_text(s)
-          # Minecraft 26.3 model package migrations.
-          package_moves = {
-              "net.minecraft.client.renderer.block.model.BakedQuad": "net.minecraft.client.resources.model.geometry.BakedQuad",
-              "net.minecraft.client.renderer.block.model.ItemTransforms": "net.minecraft.client.resources.model.cuboid.ItemTransforms",
-              "net.minecraft.client.resources.model.Material": "net.minecraft.client.resources.model.sprite.Material",
-              "net.minecraft.client.resources.model.ModelState": "net.minecraft.client.renderer.block.dispatch.ModelState",
-              "net.minecraft.world.level.BlockAndTintGetter": "net.minecraft.client.renderer.block.BlockAndTintGetter",
-              "net.minecraft.client.renderer.block.model.FaceBakery": "net.minecraft.client.resources.model.cuboid.FaceBakery",
-              "net.minecraft.client.renderer.block.model.ItemModelGenerator": "net.minecraft.client.resources.model.cuboid.ItemModelGenerator",
-              "net.minecraft.client.renderer.block.model.BlockElementFace": "net.minecraft.client.resources.model.cuboid.CuboidFace",
-              "net.minecraft.client.renderer.block.model.BlockElement": "net.minecraft.client.resources.model.cuboid.CuboidModelElement",
-          }
-          for java_file in Path("sfl-src/src/main/java").rglob("*.java"):
-              text = java_file.read_text()
-              for old, new in package_moves.items():
-                  text = text.replace(old, new)
-              # wildcard block-model imports no longer bring the cuboid/geometry classes.
-              if "import net.minecraft.client.renderer.block.model.*;" in text:
-                  text = text.replace("import net.minecraft.client.renderer.block.model.*;",
-                      "import net.minecraft.client.renderer.block.model.*;\n"
-                      "import net.minecraft.client.resources.model.cuboid.CuboidModelElement;\n"
-                      "import net.minecraft.client.resources.model.cuboid.CuboidFace;\n"
-                      "import net.minecraft.client.resources.model.cuboid.FaceBakery;\n"
-                      "import net.minecraft.client.resources.model.cuboid.ItemModelGenerator;\n"
-                      "import net.minecraft.client.resources.model.geometry.BakedQuad;")
-              java_file.write_text(text)
 
-          # Utility moved under net.minecraft.util in 26.x.
-          p = Path("sfl-src/src/main/java/com/github/salandora/sophisticatedfabriclib/model/impl/v1/client/ModelLoadingPlugin.java")
-          if p.exists():
-              p.write_text(p.read_text().replace("import net.minecraft.Util;", "import net.minecraft.util.Util;"))
-          print(Path("sfl-src/gradle.properties").read_text())
-          print(Path("sfl-src/build.gradle").read_text())
+          print(p.read_text()[:24000])
+          print(Path("core-src/gradle.properties").read_text())
           PY
 
-      - name: Compile Sophisticated Fabric Lib 26.3
-        working-directory: sfl-src
+      - name: Audit Core compatibility imports
+        shell: bash
+        run: |
+          echo "=== Porting Lib imports ==="
+          grep -RhoE 'import io[.]github[.]fabricators_of_create[.]porting_lib[^;]*;' core-src/src 2>/dev/null | sort -u || true
+          echo "=== Third-party imports ==="
+          grep -RhoE '^import (mezz|dev[.]emi|me[.]shedaniel|net[.]blay09|earth[.]terrarium|de[.]maxhenkel|top[.]theillusivec4|io[.]wispforest)[^;]*;' core-src/src 2>/dev/null | sort -u || true
+
+      - name: Compile Sophisticated Core 26.3
+        working-directory: core-src
         run: |
           chmod +x ./gradlew
           ./gradlew clean compileJava processResources --stacktrace
 
-      - name: Inspect Minecraft and Fabric 26.3 APIs
-        if: always()
-        shell: bash
-        run: |
-          mcjar="/home/runner/.gradle/caches/fabric-loom/26.3/minecraft-client.jar"
-          echo "Minecraft jar: $mcjar"
-          echo '=== Minecraft moved/common classes ==='
-          if [ -f "$mcjar" ]; then
-            jar tf "$mcjar" | grep -E '(GuiGraphics|Tesselator|Minecart|ItemInHandRenderer|AxeItem|HoeItem|ShovelItem|DiggerItem|Tier|ToolMaterial|Ingredient|TextureSheetParticle|BlockModelShaper)[^/]*[.]class$' | sort | head -1500 || true
-            echo '=== Key common javap ==='
-            for cls in \
-              net.minecraft.world.item.crafting.Ingredient \
-              net.minecraft.world.entity.vehicle.minecart.AbstractMinecart \
-              net.minecraft.client.gui.GuiGraphicsExtractor \
-              net.minecraft.client.renderer.item.ItemInHandRenderer \
-              net.minecraft.world.item.tool.AxeItem \
-              net.minecraft.world.item.tool.HoeItem \
-              net.minecraft.world.item.tool.ShovelItem \
-              net.minecraft.world.item.tool.DiggerItem \
-              net.minecraft.world.item.ToolMaterial
-            do
-              echo "--- $cls ---"
-              javap -classpath "$mcjar" -public "$cls" 2>/dev/null | head -260 || true
-            done
-          fi
-          echo '=== Fabric classes matching screen/fuel/lookup ==='
-          find ~/.gradle/caches/modules-2/files-2.1/net.fabricmc.fabric-api -type f -name '*.jar' 2>/dev/null | while read candidate; do
-            matches="$(jar tf "$candidate" 2>/dev/null | grep -E '(ExtendedScreenHandlerFactory|ScreenHandlerFactory|Fuel|BlockApiLookup|ServerWorldCache)' || true)"
-            if [ -n "$matches" ]; then
-              echo "--- $candidate ---"
-              echo "$matches"
-            fi
-          done
-          echo '=== Fabric common API javap ==='
-          alljars="$(find ~/.gradle/caches/modules-2/files-2.1/net.fabricmc.fabric-api -type f -name '*.jar' 2>/dev/null | paste -sd: -)"
-          for cls in \
-            net.fabricmc.fabric.api.lookup.v1.block.BlockApiLookup \
-            net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory \
-            net.fabricmc.fabric.api.registry.FuelRegistry \
-            net.fabricmc.fabric.api.registry.FuelValueEvents
-          do
-            echo "--- $cls ---"
-            javap -classpath "$alljars:$mcjar" -public "$cls" 2>/dev/null | head -260 || true
-          done
-      - name: Build Sophisticated Fabric Lib 26.3
-        working-directory: sfl-src
-        run: |
-          ./gradlew build -x test --stacktrace
-          find build/libs -maxdepth 1 -type f -ls
-
-      - name: Collect jar
+      - name: Collect Core jar
         if: always()
         shell: bash
         run: |
           mkdir -p out
-          find sfl-src/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' -exec cp {} out/ \; || true
+          find core-src/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' -exec cp {} out/ \; 2>/dev/null || true
 
-      - name: Upload Sophisticated Fabric Lib
+      - name: Upload Core
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: SophisticatedFabricLib-26.3
+          name: SophisticatedCore-26.3-Fabric
           path: out/
+          if-no-files-found: warn
