@@ -122,7 +122,7 @@ jobs:
           new = """    public void openEditSignScreen(SignBlockEntity sign, SignTextSlot slot, CallbackInfo ci) {
                   getTargetSignEntity(sign).ifPresent(signBlockEntity ->
                   {
-                      List<String> lines = Arrays.stream(signBlockEntity.getText(slot).getMessages(false))
+                      List<String> lines = signBlockEntity.getText(slot).getMessages(false).stream()
                               .map(message -> message.getString())
                               .toList();
                       ServerboundSignUpdatePacket packet = new ServerboundSignUpdatePacket(sign.getBlockPos(), lines, slot);
