@@ -1,0 +1,255 @@
+name: printer-26.3-port
+
+on:
+  pull_request:
+    branches: [ "DEV/26.3" ]
+  push:
+    branches: [ "printer-26.3-port" ]
+
+jobs:
+  build-printer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Litematica 26.3
+        uses: actions/checkout@v6
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Build exact Litematica 26.3 dependency
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+          ./gradlew build -x test
+          LITEMATICA_JAR="$(find "$GITHUB_WORKSPACE/build/libs" -maxdepth 1 -type f -name 'litematica-fabric-26.3-*.jar' ! -name '*sources*' | head -n1)"
+          test -n "$LITEMATICA_JAR"
+          echo "LITEMATICA_JAR=$LITEMATICA_JAR" >> "$GITHUB_ENV"
+          echo "Using $LITEMATICA_JAR"
+
+      - name: Clone classic Litematica Printer 26.2 base
+        shell: bash
+        run: |
+          git clone --depth 1 --branch 26.2-range_extend https://github.com/wujinjun-MC/litematica-printer.git "$RUNNER_TEMP/litematica-printer"
+
+      - name: Port source and metadata to Minecraft 26.3
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP/litematica-printer"
+          python3 - <<'PY'
+          from pathlib import Path
+          
+          p = Path("gradle.properties")
+          s = p.read_text()
+          replacements = {
+              "mod_version = 3.2.2": "mod_version = 3.2.2-26.3-port",
+              "malilib_version = 0.29.0": "malilib_version = 4cb96026bf",
+              "litematica_version = 0.28.4": "litematica_version = 0.28.99-dev",
+              "minecraft_version_out = 26.2": "minecraft_version_out = 26.3",
+              "minecraft_version = 26.2": "minecraft_version = 26.3",
+              "fabric_loader_version = 0.19.3": "fabric_loader_version = 0.19.5",
+              "mod_menu_version = 20.0.0-beta.2": "mod_menu_version = 21.0.0-alpha.1",
+              "fabric_api_version = 0.152.1+26.2": "fabric_api_version = 0.160.6+26.3",
+          }
+          for a, b in replacements.items():
+              if a not in s:
+                  raise SystemExit(f"Missing expected gradle.properties text: {a}")
+              s = s.replace(a, b)
+          p.write_text(s)
+          
+          p = Path("build.gradle")
+          s = p.read_text()
+          s = s.replace("id 'net.fabricmc.fabric-loom' version '1.15.+'", "id 'net.fabricmc.fabric-loom' version '1.17.+'")
+          old_mali = 'implementation "fi.dy.masa.malilib:malilib-fabric-${project.minecraft_version_out}:${project.malilib_version}"'
+          old_lite = 'implementation "fi.dy.masa.litematica:litematica-fabric-${project.minecraft_version_out}:${project.litematica_version}"'
+          if old_mali not in s or old_lite not in s:
+              raise SystemExit("Expected printer dependency lines not found")
+          s = s.replace(old_mali, 'implementation "com.github.sakura-ryoko:malilib:${project.malilib_version}"')
+          s = s.replace(old_lite, 'implementation files(System.getenv("LITEMATICA_JAR"))')
+          p.write_text(s)
+          
+          p = Path("src/main/resources/fabric.mod.json")
+          s = p.read_text()
+          s = s.replace('"minecraft": ">=26.2 <26.3"', '"minecraft": ">=26.3 <26.4"')
+          s = s.replace('"malilib": ">=0.29.0- <0.30.0-"', '"malilib": ">=0.29.99- <0.30.0-"')
+          s = s.replace('"litematica": ">=0.28.0- <0.29.0-"', '"litematica": ">=0.28.99- <0.29.0-"')
+          s = s.replace('"malilib": "<0.29.0-"', '"malilib": "<0.29.99-"')
+          s = s.replace('"litematica": "<0.28.0-"', '"litematica": "<0.28.99-"')
+          p.write_text(s)
+          
+          for java_file in [
+              Path("src/main/java/me/aleksilassila/litematica/printer/BlockHelper.java"),
+              Path("src/main/java/me/aleksilassila/litematica/printer/guides/Guides.java"),
+              Path("src/main/java/me/aleksilassila/litematica/printer/guides/placement/PropertySpecificGuesserGuide.java"),
+          ]:
+              t = java_file.read_text()
+              t = t.replace("RedStoneWireBlock", "RedstoneWireBlock")
+              java_file.write_text(t)
+          
+          p = Path("src/main/java/me/aleksilassila/litematica/printer/guides/placement/PlacementGuide.java")
+          t = p.read_text()
+          t = t.replace(
+              "return blockState.blocksMotion();",
+              "return !blockState.getCollisionShape(state.world, state.blockPos).isEmpty();"
+          )
+          p.write_text(t)
+          
+          p = Path("src/main/java/me/aleksilassila/litematica/printer/implementation/mixin/MixinClientPlayerEntity.java")
+          t = p.read_text()
+          t = t.replace("import java.util.Optional;", "import java.util.Optional;\nimport java.util.Arrays;\nimport java.util.List;")
+          t = t.replace(
+              "import net.minecraft.world.level.block.entity.SignBlockEntity;",
+              "import net.minecraft.world.level.block.entity.SignBlockEntity;\nimport net.minecraft.world.level.block.entity.SignTextSlot;"
+          )
+          old = """    public void openEditSignScreen(SignBlockEntity sign, boolean front, CallbackInfo ci) {
+                  getTargetSignEntity(sign).ifPresent(signBlockEntity ->
+                  {
+                      ServerboundSignUpdatePacket packet = new ServerboundSignUpdatePacket(sign.getBlockPos(),
+                              front,
+                              signBlockEntity.getText(front).getMessage(0, false).getString(),
+                              signBlockEntity.getText(front).getMessage(1, false).getString(),
+                              signBlockEntity.getText(front).getMessage(2, false).getString(),
+                              signBlockEntity.getText(front).getMessage(3, false).getString());
+                      this.connection.send(packet);
+                      ci.cancel();
+                  });
+              }"""
+          new = """    public void openEditSignScreen(SignBlockEntity sign, SignTextSlot slot, CallbackInfo ci) {
+                  getTargetSignEntity(sign).ifPresent(signBlockEntity ->
+                  {
+                      List<String> lines = signBlockEntity.getText(slot).getMessages(false).stream()
+                              .map(message -> message.getString())
+                              .toList();
+                      ServerboundSignUpdatePacket packet = new ServerboundSignUpdatePacket(sign.getBlockPos(), lines, slot);
+                      this.connection.send(packet);
+                      ci.cancel();
+                  });
+              }"""
+          if old not in t:
+              raise SystemExit("Expected 26.2 sign edit method not found")
+          p.write_text(t.replace(old, new))
+          
+          p = Path("src/main/java/me/aleksilassila/litematica/printer/guides/interaction/LogStrippingGuide.java")
+          t = p.read_text()
+          t = t.replace("import me.aleksilassila.litematica.printer.mixin.AxeItemAccessor;\n", "")
+          t = t.replace(
+              "import net.minecraft.world.level.block.Block;",
+              "import net.minecraft.world.level.block.Block;\nimport net.minecraft.world.level.block.Blocks;"
+          )
+          old = "    public static final Map<Block, Block> STRIPPED_BLOCKS = AxeItemAccessor.getStrippedBlocks();"
+          new = """    public static final Map<Block, Block> STRIPPED_BLOCKS = Map.ofEntries(
+                      Map.entry(Blocks.OAK_LOG, Blocks.STRIPPED_OAK_LOG),
+                      Map.entry(Blocks.OAK_WOOD, Blocks.STRIPPED_OAK_WOOD),
+                      Map.entry(Blocks.SPRUCE_LOG, Blocks.STRIPPED_SPRUCE_LOG),
+                      Map.entry(Blocks.SPRUCE_WOOD, Blocks.STRIPPED_SPRUCE_WOOD),
+                      Map.entry(Blocks.BIRCH_LOG, Blocks.STRIPPED_BIRCH_LOG),
+                      Map.entry(Blocks.BIRCH_WOOD, Blocks.STRIPPED_BIRCH_WOOD),
+                      Map.entry(Blocks.JUNGLE_LOG, Blocks.STRIPPED_JUNGLE_LOG),
+                      Map.entry(Blocks.JUNGLE_WOOD, Blocks.STRIPPED_JUNGLE_WOOD),
+                      Map.entry(Blocks.ACACIA_LOG, Blocks.STRIPPED_ACACIA_LOG),
+                      Map.entry(Blocks.ACACIA_WOOD, Blocks.STRIPPED_ACACIA_WOOD),
+                      Map.entry(Blocks.DARK_OAK_LOG, Blocks.STRIPPED_DARK_OAK_LOG),
+                      Map.entry(Blocks.DARK_OAK_WOOD, Blocks.STRIPPED_DARK_OAK_WOOD),
+                      Map.entry(Blocks.MANGROVE_LOG, Blocks.STRIPPED_MANGROVE_LOG),
+                      Map.entry(Blocks.MANGROVE_WOOD, Blocks.STRIPPED_MANGROVE_WOOD),
+                      Map.entry(Blocks.CHERRY_LOG, Blocks.STRIPPED_CHERRY_LOG),
+                      Map.entry(Blocks.CHERRY_WOOD, Blocks.STRIPPED_CHERRY_WOOD),
+                      Map.entry(Blocks.PALE_OAK_LOG, Blocks.STRIPPED_PALE_OAK_LOG),
+                      Map.entry(Blocks.PALE_OAK_WOOD, Blocks.STRIPPED_PALE_OAK_WOOD),
+                      Map.entry(Blocks.BAMBOO_BLOCK, Blocks.STRIPPED_BAMBOO_BLOCK),
+                      Map.entry(Blocks.CRIMSON_STEM, Blocks.STRIPPED_CRIMSON_STEM),
+                      Map.entry(Blocks.CRIMSON_HYPHAE, Blocks.STRIPPED_CRIMSON_HYPHAE),
+                      Map.entry(Blocks.WARPED_STEM, Blocks.STRIPPED_WARPED_STEM),
+                      Map.entry(Blocks.WARPED_HYPHAE, Blocks.STRIPPED_WARPED_HYPHAE)
+              );"""
+          if old not in t:
+              raise SystemExit("Expected AxeItem stripping map not found")
+          p.write_text(t.replace(old, new))
+          
+          p = Path("src/main/resources/litematica-printer.mixins.json")
+          t = p.read_text().replace('    "AxeItemAccessor",\n', '')
+          p.write_text(t)
+          axe_accessor = Path("src/main/java/me/aleksilassila/litematica/printer/mixin/AxeItemAccessor.java")
+          if axe_accessor.exists():
+              axe_accessor.unlink()
+
+          # 26.3 server-safety fix: rotation spoofing must not resend XYZ.
+          # A rotation-only packet is sufficient and avoids invalid-movement kicks.
+          p = Path("src/main/java/me/aleksilassila/litematica/printer/actions/PrepareAction.java")
+          t = p.read_text()
+          old_prefix = "new ServerboundMovePlayerPacket.PosRot(player.getX(), player.getY(), player.getZ(), yaw,"
+          new_prefix = "new ServerboundMovePlayerPacket.Rot(yaw,"
+          count = t.count(old_prefix)
+          if count != 1:
+              raise SystemExit(f"Expected exactly one printer PosRot prefix, found {count}")
+          p.write_text(t.replace(old_prefix, new_prefix, 1))
+          
+          PY
+
+      - name: Build Printer 26.3
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP/litematica-printer"
+          chmod +x ./gradlew
+          ./gradlew clean build --stacktrace
+
+      - name: Runtime launch smoke test with Printer
+        shell: bash
+        run: |
+          PRINTER_JAR="$(find "$RUNNER_TEMP/litematica-printer/build/libs" -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' | head -n1)"
+          test -n "$PRINTER_JAR"
+          mkdir -p "$GITHUB_WORKSPACE/run/mods"
+          cp "$PRINTER_JAR" "$GITHUB_WORKSPACE/run/mods/Litematica-Printer-26.3-Fabric.jar"
+
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb mesa-utils libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers
+          Xvfb :99 -screen 0 1280x720x24 +extension GLX +render -noreset > printer-xvfb.out 2>&1 &
+          xvfb_pid=$!
+          export DISPLAY=:99
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
+          sleep 2
+
+          set +e
+          timeout 60s ./gradlew runClient --stacktrace > printer-runclient.out 2>&1
+          code=$?
+          set -e
+          kill "$xvfb_pid" 2>/dev/null || true
+
+          cat printer-runclient.out
+          test -f run/logs/latest.log
+          tail -n 500 run/logs/latest.log
+
+          if [ "$code" -ne 124 ]; then
+            echo "Minecraft client exited before smoke-test timeout (exit $code)"
+            exit 1
+          fi
+
+          if grep -Eiq 'Mixin apply failed|InvalidMixinException|InjectionError|Could not execute entrypoint|NoSuchMethodError|NoClassDefFoundError|ExceptionInInitializerError|VerifyError|ModResolutionException|Crash report saved' run/logs/latest.log; then
+            echo "Fatal Printer/Litematica startup error detected"
+            exit 1
+          fi
+
+          grep -Eiq 'litematica_printer|Litematica Printer' run/logs/latest.log
+
+      - name: Collect Printer jar
+        shell: bash
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/printer-output"
+          JAR="$(find "$RUNNER_TEMP/litematica-printer/build/libs" -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' | head -n1)"
+          test -n "$JAR"
+          cp "$JAR" "$GITHUB_WORKSPACE/printer-output/Litematica-Printer-26.3-Fabric-3.2.2-port.jar"
+          unzip -t "$GITHUB_WORKSPACE/printer-output/Litematica-Printer-26.3-Fabric-3.2.2-port.jar"
+
+      - name: Upload Printer jar
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: litematica-printer-26.3
+          path: printer-output/
+          if-no-files-found: warn
