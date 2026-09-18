@@ -25,7 +25,23 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq xvfb libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers
           chmod +x ./gradlew
-          mkdir -p run/config run/shaderpacks/ci-pack/shaders proof
+          mkdir -p run/config run/mods run/shaderpacks/ci-pack/shaders proof
+
+          python3 - <<'PY'
+          import json, urllib.request, pathlib
+          mods = {
+              "sodium-26.3.jar": "bAZQdGpg",
+              "iris-26.3.jar": "bAdKrpw8",
+          }
+          out = pathlib.Path("run/mods")
+          out.mkdir(parents=True, exist_ok=True)
+          for name, version in mods.items():
+              with urllib.request.urlopen(f"https://api.modrinth.com/v2/version/{version}") as r:
+                  data = json.load(r)
+              url = next(f["url"] for f in data["files"] if f.get("primary")) if any(f.get("primary") for f in data["files"]) else data["files"][0]["url"]
+              print(f"Downloading {name} from {url}")
+              urllib.request.urlretrieve(url, out / name)
+          PY
 
           cat > run/config/iris.properties <<'EOF'
           shaderPack=ci-pack
@@ -56,7 +72,7 @@ jobs:
           MESA_LOADER_DRIVER_OVERRIDE: llvmpipe
         run: |
           set +e
-          timeout 100s xvfb-run -a ./gradlew runClient --no-daemon -Piris_preview_test > proof/client.out 2>&1
+          timeout 100s xvfb-run -a ./gradlew runClient --no-daemon > proof/client.out 2>&1
           code=$?
           set -e
 
