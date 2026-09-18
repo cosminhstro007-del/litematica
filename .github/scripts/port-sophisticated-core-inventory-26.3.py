@@ -339,3 +339,17 @@ for jf in java_root.rglob("*.java"):
         jf.write_text(new)
 
 print("Applied ExtendedScreenHandlerFactory -> ExtendedMenuProvider migration.")
+
+
+# Mojang renamed MobSpawnType to EntitySpawnReason in 26.x.
+for jf in java_root.rglob("*.java"):
+    txt = jf.read_text(errors="ignore")
+    new = txt.replace(
+        "net.minecraft.world.entity.MobSpawnType",
+        "net.minecraft.world.entity.EntitySpawnReason",
+    )
+    new = re.sub(r"\bMobSpawnType\b", "EntitySpawnReason", new)
+    if new != txt:
+        jf.write_text(new)
+
+print("Applied MobSpawnType -> EntitySpawnReason migration.")
