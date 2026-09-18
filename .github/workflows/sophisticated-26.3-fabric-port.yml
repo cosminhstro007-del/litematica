@@ -187,6 +187,11 @@ jobs:
               aws = aw.read_text().replace("accessWidener v2 named", "accessWidener v2 official")
               # ItemOverrides was removed by the 26.x item rendering rewrite.
               aws = "\n".join(line for line in aws.splitlines() if "renderer/block/model/ItemOverrides" not in line) + "\n"
+              # ShapedRecipe stores its result as ItemStackTemplate in 26.x.
+              aws = aws.replace(
+                  "accessible field net/minecraft/world/item/crafting/ShapedRecipe result Lnet/minecraft/world/item/ItemStack;",
+                  "accessible field net/minecraft/world/item/crafting/ShapedRecipe result Lnet/minecraft/world/item/ItemStackTemplate;"
+              )
               aw.write_text(aws)
 
           # Remove compile-only integrations that have no 26.3 artifacts yet.
