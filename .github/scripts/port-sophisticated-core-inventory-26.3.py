@@ -683,3 +683,115 @@ if mod_recipes.exists():
     mod_recipes.write_text(txt)
 
 print("Ported runtime recipe serializers and upgrade recipes to Minecraft 26.x.")
+
+
+# Minecraft 26.x SavedData is codec-based. Port settings template persistence instead of stubbing it.
+sts = java_root / "net/p3pp3rf1y/sophisticatedcore/settings/SettingsTemplateStorage.java"
+if sts.exists():
+    sts.write_text(r'''package net.p3pp3rf1y.sophisticatedcore.settings;
+
+import com.mojang.serialization.Codec;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
+import net.p3pp3rf1y.sophisticatedcore.SophisticatedCore;
+import net.p3pp3rf1y.sophisticatedcore.util.NBTHelper;
+
+import java.util.*;
+
+public class SettingsTemplateStorage extends SavedData {
+    private Map<UUID, Map<Integer, CompoundTag>> playerTemplates = new HashMap<>();
+    private Map<UUID, Map<String, CompoundTag>> playerNamedTemplates = new HashMap<>();
+    private static final SettingsTemplateStorage clientStorageCopy = new SettingsTemplateStorage();
+
+    private static final Codec<SettingsTemplateStorage> CODEC = CompoundTag.CODEC.xmap(
+            SettingsTemplateStorage::loadTag,
+            SettingsTemplateStorage::saveTag
+    );
+
+    private static final SavedDataType<SettingsTemplateStorage> TYPE = new SavedDataType<>(
+            SophisticatedCore.getRL("settings_templates"),
+            SettingsTemplateStorage::new,
+            CODEC,
+            null
+    );
+
+    private SettingsTemplateStorage() {
+    }
+
+    private SettingsTemplateStorage(Map<UUID, Map<Integer, CompoundTag>> playerTemplates,
+                                    Map<UUID, Map<String, CompoundTag>> playerNamedTemplates) {
+        this.playerTemplates = playerTemplates;
+        this.playerNamedTemplates = playerNamedTemplates;
+    }
+
+    public void putPlayerTemplate(Player player, int slot, CompoundTag settingsTag) {
+        playerTemplates.computeIfAbsent(player.getUUID(), u -> new HashMap<>()).put(slot, settingsTag);
+        setDirty();
+    }
+
+    public void putPlayerNamedTemplate(Player player, String name, CompoundTag settingsTag) {
+        playerNamedTemplates.computeIfAbsent(player.getUUID(), u -> new TreeMap<>()).put(name, settingsTag);
+        setDirty();
+    }
+
+    public Map<Integer, CompoundTag> getPlayerTemplates(Player player) {
+        return playerTemplates.getOrDefault(player.getUUID(), new HashMap<>());
+    }
+
+    public Map<String, CompoundTag> getPlayerNamedTemplates(Player player) {
+        return playerNamedTemplates.getOrDefault(player.getUUID(), new TreeMap<>());
+    }
+
+    public static SettingsTemplateStorage get() {
+        if (SophisticatedCore.isLogicalServerThread()) {
+            MinecraftServer server = SophisticatedCore.getCurrentServer();
+            if (server != null) {
+                ServerLevel overworld = server.getLevel(Level.OVERWORLD);
+                if (overworld != null) {
+                    return overworld.getDataStorage().computeIfAbsent(TYPE);
+                }
+            }
+        }
+        return clientStorageCopy;
+    }
+
+    private CompoundTag saveTag() {
+        CompoundTag tag = new CompoundTag();
+        NBTHelper.putMap(tag, "playerTemplates", playerTemplates, UUID::toString,
+                slotTemplates -> NBTHelper.putMap(new CompoundTag(), "slotTemplates", slotTemplates,
+                        String::valueOf, settingsTag -> settingsTag));
+        NBTHelper.putMap(tag, "playerNamedTemplates", playerNamedTemplates, UUID::toString,
+                namedTemplates -> NBTHelper.putMap(new CompoundTag(), "namedTemplates", namedTemplates,
+                        v -> v, settingsTag -> settingsTag));
+        return tag;
+    }
+
+    private static SettingsTemplateStorage loadTag(CompoundTag tag) {
+        return new SettingsTemplateStorage(
+                NBTHelper.getMap(tag, "playerTemplates", UUID::fromString,
+                        (key, playerTemplatesTag) -> NBTHelper.getMap((CompoundTag) playerTemplatesTag,
+                                "slotTemplates", Integer::valueOf,
+                                (k, settingsTag) -> Optional.of((CompoundTag) settingsTag))
+                ).orElse(new HashMap<>()),
+                NBTHelper.getMap(tag, "playerNamedTemplates", UUID::fromString,
+                        (key, playerNamedTemplatesTag) -> NBTHelper.getMap((CompoundTag) playerNamedTemplatesTag,
+                                "namedTemplates", v -> v,
+                                (k, settingsTag) -> Optional.of((CompoundTag) settingsTag), TreeMap::new)
+                ).orElse(new TreeMap<>())
+        );
+    }
+
+    public void clearPlayerTemplates(Player player) {
+        playerTemplates.remove(player.getUUID());
+        playerNamedTemplates.remove(player.getUUID());
+        setDirty();
+    }
+}
+''')
+
+print("Ported SettingsTemplateStorage to codec-based SavedDataType API.")
