@@ -122,6 +122,16 @@ jobs:
               "}\n"
           )
           print(p.read_text())
+
+          # Minecraft 26.3 added a boolean parameter to GuiGraphicsExtractor#tooltip.
+          p = Path("puzzleslib-src/Fabric/src/main/java/fuzs/puzzleslib/fabric/mixin/client/GuiGraphicsExtractorFabricMixin.java")
+          s = p.read_text()
+          s = s.replace(
+              "private void renderTooltip(Font font, List<ClientTooltipComponent> lines, int xo, int yo, ClientTooltipPositioner positioner, @Nullable Identifier style, CallbackInfo callback) {",
+              "private void renderTooltip(Font font, List<ClientTooltipComponent> lines, int xo, int yo, ClientTooltipPositioner positioner, @Nullable Identifier style, boolean focused, CallbackInfo callback) {"
+          )
+          p.write_text(s)
+          print(p.read_text())
           PY
 
       - name: Remove Puzzles datagen-only APIs not yet ported to 26.3
