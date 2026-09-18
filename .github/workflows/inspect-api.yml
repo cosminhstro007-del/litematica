@@ -24,10 +24,14 @@ jobs:
           javap -p -classpath "$jarfile" net.minecraft.client.gui.screens.ConnectScreen > api-proof/ConnectScreen.txt
           javap -p -classpath "$jarfile" net.minecraft.client.multiplayer.resolver.ServerAddress > api-proof/ServerAddress.txt
           javap -p -classpath "$jarfile" net.minecraft.client.multiplayer.ServerData > api-proof/ServerData.txt
+          javap -p -classpath "$jarfile" 'net.minecraft.client.multiplayer.ServerData$Type' > api-proof/ServerDataType.txt
+          javap -p -classpath "$jarfile" net.minecraft.client.multiplayer.TransferState > api-proof/TransferState.txt
           javap -p -classpath "$jarfile" net.minecraft.client.Minecraft > api-proof/Minecraft.txt
           cat api-proof/ConnectScreen.txt
           cat api-proof/ServerAddress.txt
           cat api-proof/ServerData.txt
+          cat api-proof/ServerDataType.txt
+          cat api-proof/TransferState.txt
       - uses: actions/upload-artifact@v6
         with:
           name: api-proof
