@@ -67,11 +67,16 @@ jobs:
       - name: Enter the world with Minecraft client
         shell: bash
         run: |
-          cat > quickplay.init.gradle <<'EOF'
-          gradle.projectsEvaluated {
-              def t = gradle.rootProject.tasks.findByName("runClient")
-              if (t != null) {
-                  t.args "--quickPlaySingleplayer", "LitematicaTest", "--quickPlayPath", "quickplay/log.json"
+          cat >> build.gradle <<'EOF'
+
+          loom {
+              runs {
+                  client {
+                      programArg "--quickPlaySingleplayer"
+                      programArg "LitematicaTest"
+                      programArg "--quickPlayPath"
+                      programArg "quickplay/log.json"
+                  }
               }
           }
           EOF
@@ -84,7 +89,7 @@ jobs:
           sleep 2
 
           set +e
-          timeout 100s ./gradlew -I quickplay.init.gradle runClient --stacktrace > ingame-proof/client.out 2>&1
+          timeout 100s ./gradlew runClient --stacktrace > ingame-proof/client.out 2>&1
           client_code=$?
           set -e
 
