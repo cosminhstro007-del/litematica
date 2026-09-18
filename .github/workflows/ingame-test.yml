@@ -73,17 +73,20 @@ jobs:
               runs {
                   client {
                       client()
-                      programArg "--quickPlaySingleplayer"
-                      programArg "LitematicaTest"
-                      programArg "--quickPlayPath"
-                      programArg "quickplay/log.json"
+                      programArguments.addAll([
+                          "--quickPlaySingleplayer",
+                          "LitematicaTest",
+                          "--quickPlayPath",
+                          "quickplay/log.json"
+                      ])
+                      println "LOOM_PROGRAM_ARGS=" + programArguments.get()
                   }
               }
           }
 
           tasks.named("runClient").configure {
               doFirst {
-                  println "RUNCLIENT_ARGS=" + args
+                  println "RUNCLIENT_TASK_ARGS=" + args
               }
           }
           EOF
