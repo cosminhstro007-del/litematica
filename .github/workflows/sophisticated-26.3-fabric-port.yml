@@ -201,6 +201,8 @@ jobs:
           sc = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/SophisticatedCore.java")
           if sc.exists():
               ss = sc.read_text()
+              ss = ss.replace("import fuzs.forgeconfigapiport.fabric.api.neoforge.v4.NeoForgeConfigRegistry;\n", "import fuzs.forgeconfigapiport.fabric.api.v5.ConfigRegistry;\n")
+              ss = ss.replace("NeoForgeConfigRegistry.INSTANCE", "ConfigRegistry.INSTANCE")
               ss = ss.replace("import io.github.fabricators_of_create.porting_lib.models.geometry.RegisterGeometryLoadersCallback;\n", "")
               ss = ss.replace("import net.p3pp3rf1y.sophisticatedcore.util.model.DynamicFluidContainerModel;\n", "")
               ss = ss.replace("RegisterGeometryLoadersCallback.EVENT.register(loaders -> loaders.put(SophisticatedCore.getRL(\"fluid_container\"), DynamicFluidContainerModel.Loader.INSTANCE));", "")
