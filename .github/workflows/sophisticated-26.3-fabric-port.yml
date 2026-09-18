@@ -51,6 +51,13 @@ jobs:
               s = s.replace(old, new)
           p.write_text(s)
 
+          aw = Path("sfl-src/src/main/resources/sophisticatedfabriclib.accesswidener")
+          aws = aw.read_text()
+          aws = aws.replace("accessWidener v2 named", "accessWidener v2 official")
+          aw.write_text(aws)
+          print("26.3 access widener:")
+          print(aw.read_text())
+
           p = Path("sfl-src/build.gradle")
           p.write_text(r'''plugins {
               id 'net.fabricmc.fabric-loom' version '1.17.+'
