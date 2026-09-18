@@ -395,3 +395,45 @@ for jf in java_root.rglob("*.java"):
         jf.write_text(new)
 
 print("Applied item tag, NBT Tag value, and remaining Recipe.assemble migrations.")
+
+
+# Fabric 26.x Menu API and Mojang advancement package migrations.
+for jf in java_root.rglob("*.java"):
+    txt = jf.read_text(errors="ignore")
+    new = txt
+    new = new.replace(
+        "net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerType",
+        "net.fabricmc.fabric.api.menu.v1.ExtendedMenuType",
+    )
+    new = new.replace(
+        "net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory",
+        "net.fabricmc.fabric.api.menu.v1.ExtendedMenuProvider",
+    )
+    new = re.sub(r"\bExtendedScreenHandlerType\b", "ExtendedMenuType", new)
+    new = re.sub(r"\bExtendedScreenHandlerFactory\b", "ExtendedMenuProvider", new)
+    new = new.replace(
+        "net.minecraft.advancements.critereon.RecipeUnlockedTrigger",
+        "net.minecraft.advancements.triggers.RecipeUnlockedTrigger",
+    )
+    new = new.replace(
+        "net.minecraft.advancements.criterion.RecipeUnlockedTrigger",
+        "net.minecraft.advancements.triggers.RecipeUnlockedTrigger",
+    )
+    new = new.replace(
+        "net.minecraft.advancements.Criterion",
+        "net.minecraft.advancements.triggers.Criterion",
+    )
+    if new != txt:
+        jf.write_text(new)
+
+# Preserve the public Sophisticated class name while using Fabric's new ContainerStorage backend.
+iw = java_root / "net/p3pp3rf1y/sophisticatedcore/inventory/InventoryStorageWrapper.java"
+if iw.exists():
+    txt = iw.read_text(errors="ignore")
+    txt = txt.replace("public class ContainerStorageWrapper", "public class InventoryStorageWrapper")
+    txt = txt.replace("static ContainerStorageWrapper of(", "static InventoryStorageWrapper of(")
+    txt = txt.replace("return new ContainerStorageWrapper(", "return new InventoryStorageWrapper(")
+    txt = txt.replace("private ContainerStorageWrapper(", "private InventoryStorageWrapper(")
+    iw.write_text(txt)
+
+print("Applied Fabric Menu API, advancement trigger, and InventoryStorageWrapper class-name migrations.")
