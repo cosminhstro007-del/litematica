@@ -175,10 +175,16 @@ jobs:
           for jf in Path("core-src/src/main/java").rglob("*.java"):
               rel = str(jf).replace("\\\\", "/")
               txt = jf.read_text(errors="ignore")
-              if "/client/" in rel or "import net.minecraft.client." in txt or "import com.mojang.blaze3d." in txt:
+              if (
+                  jf.name == "package-info.java"
+                  or "/client/" in rel
+                  or "import net.minecraft.client." in txt
+                  or "import com.mojang.blaze3d." in txt
+                  or "import net.p3pp3rf1y.sophisticatedcore.client." in txt
+              ):
                   client_removed.append(rel)
                   jf.unlink()
-          print(f"Removed {len(client_removed)} client Java files for common migration pass")
+          print(f"Removed {len(client_removed)} client/package-info Java files for common migration pass")
 
           # Neutralize optional compat registration during the base/common pass.
           mc = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/init/ModCompat.java")
