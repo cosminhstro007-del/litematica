@@ -1,0 +1,25 @@
+name: fetch-forgeconfig-26.3
+
+on:
+  push:
+    branches: [ "easymagic-26.3-deps" ]
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download official Forge Config API Port 26.3 Fabric
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p out
+          curl -fL --retry 3             -o out/ForgeConfigAPIPort-v26.3.0-mc26.3.x-Fabric.jar             "https://github.com/Fuzss/forge-config-api-port/releases/download/v26.3.0-mc26.3.x/ForgeConfigAPIPort-v26.3.0-mc26.3.x-Fabric.jar"
+          unzip -t out/ForgeConfigAPIPort-v26.3.0-mc26.3.x-Fabric.jar
+          sha256sum out/ForgeConfigAPIPort-v26.3.0-mc26.3.x-Fabric.jar
+      - name: Upload dependency
+        uses: actions/upload-artifact@v6
+        with:
+          name: forgeconfigapiport-26.3-fabric
+          path: out/ForgeConfigAPIPort-v26.3.0-mc26.3.x-Fabric.jar
+          if-no-files-found: error
