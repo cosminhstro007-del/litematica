@@ -312,3 +312,16 @@ for rel in normal_files:
         jf.write_text(txt.replace(".getNormal()", ".getUnitVec3i()"))
 
 print("Applied Prediction, ResourceKey.identifier and Direction.getUnitVec3i migrations.")
+
+
+# Fabric Networking API renamed directional payload registries in 26.x.
+for jf in java_root.rglob("*.java"):
+    txt = jf.read_text(errors="ignore")
+    new = txt.replace("PayloadTypeRegistry.playS2C()", "PayloadTypeRegistry.clientboundPlay()")
+    new = new.replace("PayloadTypeRegistry.playC2S()", "PayloadTypeRegistry.serverboundPlay()")
+    new = new.replace("PayloadTypeRegistry.configurationS2C()", "PayloadTypeRegistry.clientboundConfiguration()")
+    new = new.replace("PayloadTypeRegistry.configurationC2S()", "PayloadTypeRegistry.serverboundConfiguration()")
+    if new != txt:
+        jf.write_text(new)
+
+print("Applied Fabric 26.x PayloadTypeRegistry directional renames.")
