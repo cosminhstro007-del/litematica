@@ -84,7 +84,43 @@ jobs:
 
           # Ask javac for the complete migration surface instead of stopping at 100 errors.
           s += "\n\ntasks.withType(JavaCompile).configureEach { options.compilerArgs += ['-Xmaxerrs', '2000'] }\n"
+          # Remove compile-only integrations that have no 26.3 artifacts yet.
+          optional_tokens = [
+              "dev.emi:", "mezz.jei:", "me.shedaniel:", "cloth-config",
+              "curse.maven:jade", "craftingtweaks", "balm-fabric",
+              "earth.terrarium.chipped", "maven.modrinth:admiral",
+              "simple-voice-chat", "audioplayer", "dev.emi:trinkets"
+          ]
+          kept = []
+          for line in s.splitlines():
+              if any(token in line for token in optional_tokens):
+                  continue
+              kept.append(line)
+          s = "\n".join(kept) + "\n"
           p.write_text(s)
+
+          # The old buildSrc processor post-processes remapJar. 26.x is unobfuscated,
+          # so post-process the ordinary jar instead.
+          dp = Path("core-src/buildSrc/src/main/java/com/github/salandora/sophisticatedcorebuild/processor/DeduplicationProcessor.java")
+          if dp.exists():
+              ds = dp.read_text().replace('named("remapJar", Jar.class)', 'named("jar", Jar.class)')
+              dp.write_text(ds)
+
+          # Drop source files that are purely optional third-party compatibility glue.
+          optional_imports = (
+              "import mezz.jei.", "import dev.emi.emi.", "import me.shedaniel.rei.",
+              "import me.shedaniel.math.", "import earth.terrarium.chipped.",
+              "import net.blay09.mods.craftingtweaks.", "import top.theillusivec4.curios.",
+              "import dev.emi.trinkets."
+          )
+          removed = []
+          for jf in Path("core-src/src").rglob("*.java"):
+              txt = jf.read_text(errors="ignore")
+              if any(prefix in txt for prefix in optional_imports):
+                  removed.append(str(jf))
+                  jf.unlink()
+          print("Removed optional compat Java files:")
+          print("\n".join(removed))
 
           print(p.read_text()[:24000])
           print(Path("core-src/gradle.properties").read_text())
