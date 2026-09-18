@@ -905,3 +905,66 @@ public final class ItemHandlerHelper {
 }
 ''')
 print("Added vanilla 26.3 ItemHandlerHelper replacement.")
+
+
+# Minecraft 26.x removed Fabric FuelRegistry and the old ArmorItem material test.
+# Use vanilla runtime FuelValues and the piglin_safe_armor item tag.
+sitem = java_root / "net/p3pp3rf1y/sophisticatedcore/extensions/item/SophisticatedItem.java"
+if sitem.exists():
+    txt = sitem.read_text(errors="ignore")
+    txt = txt.replace("import net.fabricmc.fabric.api.registry.FuelRegistry;\n", "")
+    txt = txt.replace("import net.minecraft.world.item.ArmorItem;\n", "")
+    txt = txt.replace("import net.minecraft.world.item.ArmorMaterials;\n", "")
+    if "import net.minecraft.tags.ItemTags;" not in txt:
+        txt = txt.replace("import net.minecraft.core.component.DataComponents;\n", "import net.minecraft.core.component.DataComponents;\nimport net.minecraft.tags.ItemTags;\nimport net.p3pp3rf1y.sophisticatedcore.SophisticatedCore;\n")
+    txt = re.sub(
+        r'default int getBurnTime\(ItemStack stack, @Nullable RecipeType<\?> recipeType\) \{.*?\n\t\}',
+        '''default int getBurnTime(ItemStack stack, @Nullable RecipeType<?> recipeType) {
+        var server = SophisticatedCore.getCurrentServer();
+        return server == null ? 0 : server.fuelValues().burnDuration(stack);
+    }''',
+        txt,
+        count=1,
+        flags=re.S,
+    )
+    txt = re.sub(
+        r'default boolean makesPiglinsNeutral\(ItemStack stack, LivingEntity wearer\) \{.*?\n\t\}',
+        '''default boolean makesPiglinsNeutral(ItemStack stack, LivingEntity wearer) {
+        return stack.is(ItemTags.PIGLIN_SAFE_ARMOR);
+    }''',
+        txt,
+        count=1,
+        flags=re.S,
+    )
+    sitem.write_text(txt)
+
+sstack = java_root / "net/p3pp3rf1y/sophisticatedcore/extensions/item/SophisticatedItemStack.java"
+if sstack.exists():
+    txt = sstack.read_text(errors="ignore")
+    if "import net.minecraft.tags.ItemTags;" not in txt:
+        txt = txt.replace("import net.minecraft.stats.Stats;\n", "import net.minecraft.stats.Stats;\nimport net.minecraft.tags.ItemTags;\nimport net.p3pp3rf1y.sophisticatedcore.SophisticatedCore;\n")
+    txt = re.sub(
+        r'default int getBurnTime\(@Nullable RecipeType<\?> recipeType\) \{.*?\n\t\}',
+        '''default int getBurnTime(@Nullable RecipeType<?> recipeType) {
+        if (self().isEmpty()) {
+            return 0;
+        }
+        var server = SophisticatedCore.getCurrentServer();
+        return server == null ? 0 : server.fuelValues().burnDuration(self());
+    }''',
+        txt,
+        count=1,
+        flags=re.S,
+    )
+    txt = re.sub(
+        r'default boolean makesPiglinsNeutral\(LivingEntity wearer\) \{.*?\n\t\}',
+        '''default boolean makesPiglinsNeutral(LivingEntity wearer) {
+        return self().is(ItemTags.PIGLIN_SAFE_ARMOR);
+    }''',
+        txt,
+        count=1,
+        flags=re.S,
+    )
+    sstack.write_text(txt)
+
+print("Ported fuel and piglin-safe item extension logic to vanilla 26.x APIs.")
