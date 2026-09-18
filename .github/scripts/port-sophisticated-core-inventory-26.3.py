@@ -856,3 +856,52 @@ if cfg.exists():
     cfg.write_text(txt)
 
 print("Applied 26.x NBT primitive/array and Forge Config v5 event API fixes.")
+
+
+# Replace removed Porting Lib ItemHandlerHelper with a small vanilla 26.3 implementation.
+helper = java_root / "io/github/fabricators_of_create/porting_lib/transfer/item/ItemHandlerHelper.java"
+helper.parent.mkdir(parents=True, exist_ok=True)
+helper.write_text(r'''package io.github.fabricators_of_create.porting_lib.transfer.item;
+
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+
+public final class ItemHandlerHelper {
+    private ItemHandlerHelper() {}
+
+    public static void giveItemToPlayer(Player player, ItemStack stack) {
+        giveItemToPlayer(player, stack, -1);
+    }
+
+    public static void giveItemToPlayer(Player player, ItemStack stack, int preferredSlot) {
+        if (stack.isEmpty()) {
+            return;
+        }
+
+        Inventory inventory = player.getInventory();
+        if (preferredSlot >= 0 && preferredSlot < inventory.getContainerSize()) {
+            ItemStack existing = inventory.getItem(preferredSlot);
+            if (existing.isEmpty()) {
+                inventory.setItem(preferredSlot, stack.copy());
+                stack.setCount(0);
+            } else if (ItemStack.isSameItemSameComponents(existing, stack)) {
+                int move = Math.min(stack.getCount(), existing.getMaxStackSize() - existing.getCount());
+                if (move > 0) {
+                    existing.grow(move);
+                    stack.shrink(move);
+                }
+            }
+        }
+
+        if (!stack.isEmpty()) {
+            inventory.add(stack);
+        }
+        if (!stack.isEmpty() && !player.level().isClientSide()) {
+            player.drop(stack.copy(), false, net.minecraft.util.Prediction.SERVER_ONLY);
+            stack.setCount(0);
+        }
+    }
+}
+''')
+print("Added vanilla 26.3 ItemHandlerHelper replacement.")
