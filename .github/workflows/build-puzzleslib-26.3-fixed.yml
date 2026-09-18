@@ -1,0 +1,72 @@
+name: build-puzzleslib-26.3-fixed
+
+on:
+  push:
+    branches: [ "easymagic-26.3-deps" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Java 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Clone Puzzles Lib 26.3
+        shell: bash
+        run: |
+          git clone --depth 1 --branch 26.3.x https://github.com/Fuzss/puzzles-lib.git puzzles-lib
+
+      - name: Fix NaturalSpawner 26.3 mixin signature
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("puzzles-lib/Fabric/src/main/java/fuzs/puzzleslib/fabric/mixin/NaturalSpawnerFabricMixin.java")
+          s = p.read_text()
+          s = s.replace("import net.minecraft.core.Holder;\n", "")
+          s = s.replace("import net.minecraft.world.level.biome.Biome;\n", "")
+          s = s.replace("import org.jspecify.annotations.Nullable;\n", "")
+          old = "private static WeightedList<MobSpawnSettings.SpawnerData> mobsAt(WeightedList<MobSpawnSettings.SpawnerData> weightedList, ServerLevel level, StructureManager structureManager, ChunkGenerator generator, MobCategory mobCategory, BlockPos pos, @Nullable Holder<Biome> biome)"
+          new = "private static WeightedList<MobSpawnSettings.SpawnerData> mobsAt(WeightedList<MobSpawnSettings.SpawnerData> weightedList, ServerLevel level, StructureManager structureManager, ChunkGenerator generator, MobCategory mobCategory, BlockPos pos)"
+          if old not in s:
+              raise SystemExit("Expected 26.3 NaturalSpawner mixin signature not found")
+          p.write_text(s.replace(old, new))
+          PY
+
+      - name: Build Fabric Puzzles Lib
+        shell: bash
+        run: |
+          cd puzzles-lib
+          chmod +x gradlew
+          ./gradlew :Fabric:build --stacktrace
+
+      - name: Verify patched class signature
+        shell: bash
+        run: |
+          JAR="$(find puzzles-lib/Fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' ! -name '*javadoc*' | head -n1)"
+          test -n "$JAR"
+          javap -classpath "$JAR" -p -s fuzs.puzzleslib.fabric.mixin.NaturalSpawnerFabricMixin > /tmp/naturalspawner.txt
+          cat /tmp/naturalspawner.txt
+          if grep -q 'Lnet/minecraft/core/Holder;' /tmp/naturalspawner.txt; then
+            echo "Holder parameter still present"
+            exit 1
+          fi
+          unzip -t "$JAR"
+
+      - name: Collect jar
+        shell: bash
+        run: |
+          mkdir -p out
+          JAR="$(find puzzles-lib/Fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' ! -name '*javadoc*' | head -n1)"
+          cp "$JAR" out/PuzzlesLib-26.3-Fabric-26.3.0-NATURALSPAWNER-FIX.jar
+
+      - name: Upload jar
+        uses: actions/upload-artifact@v6
+        with:
+          name: puzzleslib-26.3-naturalspawner-fix
+          path: out/PuzzlesLib-26.3-Fabric-26.3.0-NATURALSPAWNER-FIX.jar
+          if-no-files-found: error
