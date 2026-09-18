@@ -36,6 +36,11 @@ jobs:
           from pathlib import Path
           import re
 
+          wp = Path("core-src/gradle/wrapper/gradle-wrapper.properties")
+          ws = wp.read_text()
+          ws = re.sub(r'gradle-[0-9.]+-bin[.]zip', 'gradle-9.5.0-bin.zip', ws)
+          wp.write_text(ws)
+
           p = Path("core-src/gradle.properties")
           s = p.read_text()
           replacements = {
