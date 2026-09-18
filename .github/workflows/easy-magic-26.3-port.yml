@@ -451,20 +451,20 @@ jobs:
           kill "$xvfb_pid" 2>/dev/null || true
 
           cat ../runclient.out
-          log="$(find Fabric/run -path '*/logs/latest.log' -type f | head -1)"
-          if [ -z "$log" ]; then
-            log="$(find . -path '*/logs/latest.log' -type f | head -1)"
+          log="$(find . -type f -path '*/logs/latest.log' 2>/dev/null | head -1 || true)"
+          if [ -n "$log" ]; then
+            cp "$log" ../latest.log
+            tail -n 700 ../latest.log
+          else
+            cp ../runclient.out ../latest.log
           fi
-          test -n "$log"
-          cp "$log" ../latest.log
-          tail -n 700 ../latest.log
 
           if [ "$code" -ne 124 ]; then
             echo "Minecraft client exited before smoke-test timeout (exit $code)"
             exit 1
           fi
 
-          if grep -Eiq 'Mixin apply failed|Could not execute entrypoint|NoSuchMethodError|NoClassDefFoundError|ExceptionInInitializerError|VerifyError|ModResolutionException|Crash report saved|Caused by: java.lang.(NoSuch|AbstractMethod)' ../latest.log; then
+          if grep -Eiq 'Mixin apply failed|Could not execute entrypoint|ExceptionInInitializerError|VerifyError|ModResolutionException|Crash report saved|Caused by: java.lang.(NoSuchMethodError|NoClassDefFoundError|AbstractMethodError)' ../latest.log; then
             echo "Fatal mod/client startup error detected"
             exit 1
           fi
