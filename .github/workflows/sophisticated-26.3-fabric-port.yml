@@ -199,39 +199,49 @@ jobs:
           mcjar=""
           frapijar=""
           while IFS= read -r candidate; do
-            if [ -z "$mcjar" ] && jar tf "$candidate" 2>/dev/null | grep -q '^net/minecraft/client/Minecraft.class$'; then
-              mcjar="$candidate"
-            fi
-            if [ -z "$frapijar" ] && jar tf "$candidate" 2>/dev/null | grep -q '^net/fabricmc/fabric/api/client/renderer/v1/mesh/QuadEmitter.class$'; then
-              frapijar="$candidate"
-            fi
+            if [ -z "$mcjar" ] && jar tf "$candidate" 2>/dev/null | grep -q '^net/minecraft/client/Minecraft.class$'; then mcjar="$candidate"; fi
+            if [ -z "$frapijar" ] && jar tf "$candidate" 2>/dev/null | grep -q '^net/fabricmc/fabric/api/client/renderer/v1/mesh/QuadEmitter.class$'; then frapijar="$candidate"; fi
             if [ -n "$mcjar" ] && [ -n "$frapijar" ]; then break; fi
           done < <(find sfl-src/.gradle ~/.gradle -type f -name '*.jar' 2>/dev/null | sort -u)
           echo "Minecraft jar: $mcjar"
           echo "Fabric renderer jar: $frapijar"
           if [ -n "$frapijar" ]; then
-            echo '=== Fabric renderer classes ==='
-            jar tf "$frapijar" | grep '^net/fabricmc/fabric/api/client/renderer/v1/.*[.]class$' | head -1200 || true
-          fi
-          if [ -n "$mcjar" ]; then
-            echo '=== Key Minecraft signatures ==='
+            echo '=== Key Fabric renderer signatures ==='
             for cls in \
-              net.minecraft.world.entity.Mob \
-              net.minecraft.world.level.storage.loot.predicates.LootItemCondition \
-              net.minecraft.client.resources.model.ModelBaker \
-              net.minecraft.client.resources.model.UnbakedModel \
-              net.minecraft.client.resources.model.ResolvedModel \
-              net.minecraft.client.resources.model.cuboid.CuboidModelElement \
-              net.minecraft.client.resources.model.cuboid.CuboidFace \
-              net.minecraft.client.resources.model.cuboid.FaceBakery \
-              net.minecraft.client.resources.model.cuboid.ItemModelGenerator \
-              net.minecraft.client.resources.model.geometry.BakedQuad \
-              net.minecraft.client.resources.model.sprite.Material \
-              net.minecraft.client.renderer.block.model.BlockModel \
-              net.minecraft.client.renderer.item.ItemModel
+              net.fabricmc.fabric.api.client.renderer.v1.Renderer \
+              net.fabricmc.fabric.api.client.renderer.v1.mesh.Mesh \
+              net.fabricmc.fabric.api.client.renderer.v1.mesh.MeshView \
+              net.fabricmc.fabric.api.client.renderer.v1.mesh.MutableMesh \
+              net.fabricmc.fabric.api.client.renderer.v1.mesh.MutableQuadView \
+              net.fabricmc.fabric.api.client.renderer.v1.mesh.QuadEmitter \
+              net.fabricmc.fabric.api.client.renderer.v1.model.MeshQuadCollection \
+              net.fabricmc.fabric.api.client.renderer.v1.model.ModelHelper \
+              net.fabricmc.fabric.api.client.renderer.v1.model.FabricBlockStateModel \
+              net.fabricmc.fabric.api.client.renderer.v1.model.FabricBlockStateModelPart
             do
               echo "--- $cls ---"
-              javap -classpath "$mcjar" -public "$cls" 2>/dev/null | head -220 || true
+              javap -classpath "$frapijar:$mcjar" -public "$cls" 2>/dev/null | head -260 || true
+            done
+          fi
+          if [ -n "$mcjar" ]; then
+            echo '=== Additional Minecraft signatures ==='
+            for cls in \
+              net.minecraft.client.renderer.block.dispatch.BlockStateModelPart \
+              net.minecraft.client.renderer.block.dispatch.ModelState \
+              net.minecraft.client.resources.model.geometry.QuadCollection \
+              net.minecraft.client.resources.model.geometry.QuadCollection\$Builder \
+              net.minecraft.client.resources.model.geometry.UnbakedGeometry \
+              net.minecraft.client.resources.model.sprite.Material\$Baked \
+              net.minecraft.client.resources.model.sprite.MaterialBaker \
+              net.minecraft.client.resources.model.sprite.TextureSlots \
+              net.minecraft.client.resources.model.cuboid.ItemTransforms \
+              net.minecraft.client.resources.model.cuboid.CuboidModel \
+              net.minecraft.client.resources.model.cuboid.UnbakedCuboidGeometry \
+              net.minecraft.client.renderer.block.BlockModelRenderState \
+              net.minecraft.client.renderer.item.ModelRenderProperties
+            do
+              echo "--- $cls ---"
+              javap -classpath "$mcjar" -public "$cls" 2>/dev/null | head -260 || true
             done
           fi
       - name: Build Sophisticated Fabric Lib 26.3
