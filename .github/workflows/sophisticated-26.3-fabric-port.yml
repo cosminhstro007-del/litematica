@@ -84,6 +84,14 @@ jobs:
 
           # Ask javac for the complete migration surface instead of stopping at 100 errors.
           s += "\n\ntasks.withType(JavaCompile).configureEach { options.compilerArgs += ['-Xmaxerrs', '2000'] }\n"
+          # Minecraft 26.3 uses the official/unobfuscated namespace in access wideners.
+          aw = Path("core-src/src/main/resources/sophisticatedcore.accesswidener")
+          if aw.exists():
+              aws = aw.read_text().replace("accessWidener v2 named", "accessWidener v2 official")
+              # ItemOverrides was removed by the 26.x item rendering rewrite.
+              aws = "\n".join(line for line in aws.splitlines() if "renderer/block/model/ItemOverrides" not in line) + "\n"
+              aw.write_text(aws)
+
           # Remove compile-only integrations that have no 26.3 artifacts yet.
           optional_tokens = [
               "dev.emi:", "mezz.jei:", "me.shedaniel:", "cloth-config",
