@@ -1,4 +1,4 @@
-name: inspect-mc26-terrain
+name: inspect-mc26-terrain-details
 on:
   push:
     branches:
@@ -13,30 +13,18 @@ jobs:
           distribution: temurin
           java-version: 25
       - uses: gradle/actions/setup-gradle@v5
-      - name: inspect terrain
+      - name: inspect terrain details
         shell: bash
         run: |
           chmod +x ./gradlew
           ./gradlew classes
-          mkdir -p terrain-proof
           jarfile=$(find .gradle/loom-cache/minecraftMaven -name '*.jar' | grep '26.3' | grep 'merged' | head -n 1)
-          echo "JAR=$jarfile"
-          echo "=== terrain-related resources ==="
-          jar tf "$jarfile" | grep -Ei 'terrain|chunk.*(vsh|fsh|glsl)|shaders/core' | head -n 500 || true
-          for p in             assets/minecraft/shaders/core/terrain.vsh             assets/minecraft/shaders/core/terrain.fsh             assets/minecraft/shaders/core/rendertype_solid.vsh             assets/minecraft/shaders/core/rendertype_solid.fsh             assets/minecraft/shaders/include/terrain.glsl             assets/minecraft/shaders/include/dynamictransforms.glsl; do
-            echo "===== $p ====="
-            unzip -p "$jarfile" "$p" || true
-            echo
+          for p in assets/minecraft/shaders/include/terrainglobals.glsl assets/minecraft/shaders/include/chunksection.glsl assets/minecraft/shaders/include/globals.glsl; do
+            echo "===== $p ====="; unzip -p "$jarfile" "$p" || true; echo
           done
-          echo "=== RenderPipelines ==="
-          javap -p -c -classpath "$jarfile" net.minecraft.client.renderer.RenderPipelines | grep -n -A220 -B20 'TERRAIN' | head -n 700 || true
-          echo "=== ChunkSectionsToRender nested classes ==="
-          jar tf "$jarfile" | grep 'net/minecraft/client/renderer/chunk/ChunkSectionsToRender' || true
-          for cls in $(jar tf "$jarfile" | grep 'net/minecraft/client/renderer/chunk/ChunkSectionsToRender.*class' | sed 's#/#.#g;s#.class$##'); do
-            echo "===== $cls ====="
-            javap -p -c -classpath "$jarfile" "$cls" | head -n 800 || true
-          done
-      - uses: actions/upload-artifact@v6
-        with:
-          name: terrain-proof
-          path: terrain-proof/
+          echo "===== DynamicGpuData ====="
+          javap -p -c -classpath "$jarfile" net.minecraft.client.renderer.DynamicGpuData
+          echo "===== TerrainTransform ====="
+          javap -p -c -classpath "$jarfile" 'net.minecraft.client.renderer.DynamicGpuData$TerrainTransform'
+          echo "===== BindGroupLayouts ====="
+          javap -p -classpath "$jarfile" net.minecraft.client.renderer.BindGroupLayouts
