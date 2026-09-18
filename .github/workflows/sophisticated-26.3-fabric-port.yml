@@ -79,6 +79,9 @@ jobs:
 
           # Porting Lib has no 26.3 artifacts. Remove dependency loop; target-specific shims are added next.
           s=re.sub(r'\n\s*for \(def module in porting_lib_modules\.split\(\',\'\)\) \{.*?\n\s*\}\n', '\n', s, count=1, flags=re.S)
+          # 26.x is unobfuscated, so Loom has no remapJar task; publish the normal jar.
+          s = s.replace("remapJar", "jar")
+
           # Ask javac for the complete migration surface instead of stopping at 100 errors.
           s += "\n\ntasks.withType(JavaCompile).configureEach { options.compilerArgs += ['-Xmaxerrs', '2000'] }\n"
           p.write_text(s)
