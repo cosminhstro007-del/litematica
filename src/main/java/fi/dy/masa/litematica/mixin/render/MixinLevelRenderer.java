@@ -92,31 +92,31 @@ public abstract class MixinLevelRenderer
 		}
 	}
 
-\t@Inject(method = "executeSolid", at = @At("TAIL"))
-\tprivate void litematica_renderSchematicOpaque(ChunkSectionsToRender chunkSectionsToRender,
-\t                                               FeatureRenderDispatcher.PreparedFrame featureFrame,
-\t                                               RenderPass renderPass, CallbackInfo ci)
-\t{
-\t\tthis.litematica$prepareProfiler();
-\t\tLitematicaRenderer.getInstance().piecewiseDrawBlockLayerGroup(renderPass, ChunkSectionLayerGroup.OPAQUE);
+	@Inject(method = "executeSolid", at = @At("TAIL"))
+	private void litematica_renderSchematicOpaque(ChunkSectionsToRender chunkSectionsToRender,
+	                                               FeatureRenderDispatcher.PreparedFrame featureFrame,
+	                                               RenderPass renderPass, CallbackInfo ci)
+	{
+		this.litematica$prepareProfiler();
+		LitematicaRenderer.getInstance().piecewiseDrawBlockLayerGroup(renderPass, ChunkSectionLayerGroup.OPAQUE);
 
-\t\tif (this.useOIT())
-\t\t{
-\t\t\tLitematicaRenderer.getInstance().piecewiseDrawBlockLayerGroup(renderPass, ChunkSectionLayerGroup.TRANSLUCENT);
-\t\t}
-\t}
+		if (this.useOIT())
+		{
+			LitematicaRenderer.getInstance().piecewiseDrawBlockLayerGroup(renderPass, ChunkSectionLayerGroup.TRANSLUCENT);
+		}
+	}
 
-\t@Inject(method = "executeClassicTransparency", at = @At("TAIL"))
-\tprivate void litematica_renderSchematicTranslucent(ChunkSectionsToRender chunkSectionsToRender,
-\t                                                    FeatureRenderDispatcher.PreparedFrame featureFrame,
-\t                                                    RenderPass renderPass, CallbackInfo ci)
-\t{
-\t\tif (!this.useOIT())
-\t\t{
-\t\t\tthis.litematica$prepareProfiler();
-\t\t\tLitematicaRenderer.getInstance().piecewiseDrawBlockLayerGroup(renderPass, ChunkSectionLayerGroup.TRANSLUCENT);
-\t\t}
-\t}
+	@Inject(method = "executeClassicTransparency", at = @At("TAIL"))
+	private void litematica_renderSchematicTranslucent(ChunkSectionsToRender chunkSectionsToRender,
+	                                                    FeatureRenderDispatcher.PreparedFrame featureFrame,
+	                                                    RenderPass renderPass, CallbackInfo ci)
+	{
+		if (!this.useOIT())
+		{
+			this.litematica$prepareProfiler();
+			LitematicaRenderer.getInstance().piecewiseDrawBlockLayerGroup(renderPass, ChunkSectionLayerGroup.TRANSLUCENT);
+		}
+	}
 
 	@Inject(method = "executeOutline", at = @At("TAIL"))
 	private void litematica_renderMainSection_Outline2(FeatureRenderDispatcher.PreparedFrame featureFrame, CallbackInfo ci)
