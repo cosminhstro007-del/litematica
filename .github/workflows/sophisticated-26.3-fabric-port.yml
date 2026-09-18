@@ -27,6 +27,13 @@ jobs:
           ref: 1.21.1-fabric-dev
           path: sfl-src
 
+      - name: Checkout Porting Lib transfer reference
+        uses: actions/checkout@v6
+        with:
+          repository: Fabricators-of-Create/Porting-Lib
+          ref: 74fe93105b83775d7e2352998ec72e1b8307b2e3
+          path: portinglib-src
+
       - name: Setup Java 25
         uses: actions/setup-java@v5
         with:
@@ -114,7 +121,6 @@ jobs:
               "io.github.fabricators_of_create.porting_lib.fluids.FluidType": "com.github.salandora.sophisticatedfabriclib.fluid.api.v1.FluidType",
               "io.github.fabricators_of_create.porting_lib.transfer.fluid.SimpleFluidContent": "com.github.salandora.sophisticatedfabriclib.fluid.api.v1.SimpleFluidContent",
               "io.github.fabricators_of_create.porting_lib.transfer.fluid.block.BucketPickupHandlerWrapper": "com.github.salandora.sophisticatedfabriclib.fluid.api.v1.BucketPickupHandlerWrapper",
-              "io.github.fabricators_of_create.porting_lib.transfer.item.ItemStackHandler": "com.github.salandora.sophisticatedfabriclib.transfer.api.v1.ItemStackHandler",
               "io.github.fabricators_of_create.porting_lib.transfer.TransferUtil": "com.github.salandora.sophisticatedfabriclib.transfer.api.v1.TransferUtil",
               "io.github.fabricators_of_create.porting_lib.transfer.MutableContainerItemContext": "com.github.salandora.sophisticatedfabriclib.transfer.api.v1.ItemStackContainerItemContext",
           }
@@ -130,6 +136,144 @@ jobs:
           data_dir = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/data")
           if data_dir.exists():
               shutil.rmtree(data_dir)
+
+          # Keep the Porting Lib item-handler compatibility layer Core was written against,
+          # but run it on the current Fabric transfer API.
+          pl_files = [
+              "modules/transfer/src/main/java/io/github/fabricators_of_create/porting_lib/transfer/item/SlottedStackStorage.java",
+              "modules/transfer/src/main/java/io/github/fabricators_of_create/porting_lib/transfer/item/ItemStackHandler.java",
+              "modules/transfer/src/main/java/io/github/fabricators_of_create/porting_lib/transfer/item/ItemStackHandlerSlot.java",
+              "modules/transfer/src/main/java/io/github/fabricators_of_create/porting_lib/transfer/callbacks/TransactionCallback.java",
+              "modules/transfer/src/main/java/io/github/fabricators_of_create/porting_lib/transfer/callbacks/TransactionSuccessCallback.java",
+              "modules/transfer/src/main/java/io/github/fabricators_of_create/porting_lib/transfer/callbacks/TransactionFailCallback.java",
+          ]
+          for rel in pl_files:
+              src = Path("portinglib-src") / rel
+              pkg_rel = Path(*src.parts[src.parts.index("java")+1:])
+              dst = Path("core-src/src/main/java") / pkg_rel
+              dst.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copy2(src, dst)
+
+          # Make the old ItemStackHandler standalone: remove Porting Lib utility-only dependencies.
+          ih = Path("core-src/src/main/java/io/github/fabricators_of_create/porting_lib/transfer/item/ItemStackHandler.java")
+          ihs = ih.read_text()
+          for imp in [
+              "import io.github.fabricators_of_create.porting_lib.core.util.INBTSerializable;\n",
+              "import io.github.fabricators_of_create.porting_lib.util.DualSortedSetIterator;\n",
+              "import io.github.fabricators_of_create.porting_lib.util.EmptySortedSet;\n",
+              "import io.github.fabricators_of_create.porting_lib.util.ItemStackUtil;\n",
+          ]:
+              ihs = ihs.replace(imp, "")
+          ihs = ihs.replace(" implements SlottedStackStorage, INBTSerializable<CompoundTag>", " implements SlottedStackStorage")
+          ihs = ihs.replace("this(ItemStackUtil.createEmptyStackArray(stacks));",
+                            "this(java.util.stream.IntStream.range(0, stacks).mapToObj(i -> ItemStack.EMPTY).toArray(ItemStack[]::new));")
+          ihs = ihs.replace("return lookup.containsKey(item) ? lookup.get(item) : EmptySortedSet.cast();",
+                            "return lookup.containsKey(item) ? lookup.get(item) : java.util.Collections.emptySortedSet();")
+          old_insertable = """\tprivate Iterator<ItemStackHandlerSlot> getInsertableSlotsFor(ItemVariant variant) {
+\t\tSortedSet<ItemStackHandlerSlot> slots = getSlotsContaining(variant.getItem());
+\t\tSortedSet<ItemStackHandlerSlot> emptySlots = getSlotsContaining(Items.AIR);
+\t\tif (slots.isEmpty()) {
+\t\t\treturn emptySlots.isEmpty() ? Collections.emptyIterator() : emptySlots.iterator();
+\t\t} else {
+\t\t\treturn emptySlots.isEmpty() ? slots.iterator() : new DualSortedSetIterator<>(slots, emptySlots);
+\t\t}
+\t}"""
+          new_insertable = """\tprivate Iterator<ItemStackHandlerSlot> getInsertableSlotsFor(ItemVariant variant) {
+\t\tjava.util.ArrayList<ItemStackHandlerSlot> combined = new java.util.ArrayList<>();
+\t\tcombined.addAll(getSlotsContaining(variant.getItem()));
+\t\tcombined.addAll(getSlotsContaining(Items.AIR));
+\t\tcombined.sort(java.util.Comparator.comparingInt(ItemStackHandlerSlot::getIndex));
+\t\treturn combined.iterator();
+\t}"""
+          ihs = ihs.replace(old_insertable, new_insertable)
+          # No longer implementing INBTSerializable, so these are ordinary public methods.
+          ihs = ihs.replace("\n\t@Override\n\tpublic CompoundTag serializeNBT", "\n\tpublic CompoundTag serializeNBT")
+          ihs = ihs.replace("\n\t@Override\n\tpublic void deserializeNBT", "\n\tpublic void deserializeNBT")
+          ih.write_text(ihs)
+
+          slot = Path("core-src/src/main/java/io/github/fabricators_of_create/porting_lib/transfer/item/ItemStackHandlerSlot.java")
+          ss = slot.read_text()
+          ss = ss.replace("import io.github.fabricators_of_create.porting_lib.core.PortingLib;\n", "")
+          ss = ss.replace("this.lastStack = PortingLib.DEBUG ? stack : stack.copy();", "this.lastStack = stack.copy();")
+          slot.write_text(ss)
+
+          # Fabric renamed InventoryStorage to ContainerStorage.
+          iw = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/inventory/InventoryStorageWrapper.java")
+          if iw.exists():
+              ws = iw.read_text()
+              ws = ws.replace("net.fabricmc.fabric.api.transfer.v1.item.InventoryStorage",
+                              "net.fabricmc.fabric.api.transfer.v1.item.ContainerStorage")
+              ws = ws.replace("InventoryStorage", "ContainerStorage")
+              iw.write_text(ws)
+
+          # The old code reached into InventoryStorageImpl.parts. Use the public 26.x slot list instead.
+          tp = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/network/TransferItemsPayload.java")
+          if tp.exists():
+              ts = tp.read_text()
+              ts = ts.replace("import net.fabricmc.fabric.api.transfer.v1.item.InventoryStorage;\n",
+                              "import net.fabricmc.fabric.api.transfer.v1.item.ContainerStorage;\n")
+              ts = ts.replace("import net.fabricmc.fabric.impl.transfer.item.InventoryStorageImpl;\n", "")
+              ts = ts.replace("super(inv, 0, inv.items.size());", "super(inv, 0, 36);")
+              old = """\tprivate static class RangedWrapper implements IItemHandlerSimpleInserter {
+\t\tprivate final InventoryStorageImpl inventoryStorage;
+
+\t\tpublic RangedWrapper(Inventory inv, int start, int end) {
+\t\t\tthis.inventoryStorage = (InventoryStorageImpl) InventoryStorage.of(inv, null);
+\t\t\tthis.inventoryStorage.parts = Collections.unmodifiableList(inventoryStorage.parts.subList(start, end));
+\t\t}
+
+\t\t@Override
+\t\tpublic int getSlotCount() {
+\t\t\treturn inventoryStorage.getSlotCount();
+\t\t}
+
+\t\t@Override
+\t\tpublic SingleSlotStorage<ItemVariant> getSlot(int slot) {
+\t\t\treturn inventoryStorage.getSlot(slot);
+\t\t}
+
+\t\t@Override
+\t\tpublic List<SingleSlotStorage<ItemVariant>> getSlots() {
+\t\t\treturn inventoryStorage.parts;
+\t\t}"""
+              new = """\tprivate static class RangedWrapper implements IItemHandlerSimpleInserter {
+\t\tprivate final List<SingleSlotStorage<ItemVariant>> slots;
+
+\t\tpublic RangedWrapper(Inventory inv, int start, int end) {
+\t\t\tList<SingleSlotStorage<ItemVariant>> all = ContainerStorage.of(inv, null).getSlots();
+\t\t\tthis.slots = List.copyOf(all.subList(Math.min(start, all.size()), Math.min(end, all.size())));
+\t\t}
+
+\t\t@Override
+\t\tpublic int getSlotCount() {
+\t\t\treturn slots.size();
+\t\t}
+
+\t\t@Override
+\t\tpublic SingleSlotStorage<ItemVariant> getSlot(int slot) {
+\t\t\treturn slots.get(slot);
+\t\t}
+
+\t\t@Override
+\t\tpublic List<SingleSlotStorage<ItemVariant>> getSlots() {
+\t\t\treturn slots;
+\t\t}"""
+              ts = ts.replace(old, new)
+              ts = ts.replace("return inventoryStorage.insert(resource, maxAmount, transaction);",
+"""long inserted = 0;
+\t\t\tfor (SingleSlotStorage<ItemVariant> slot : slots) {
+\t\t\t\tinserted += slot.insert(resource, maxAmount - inserted, transaction);
+\t\t\t\tif (inserted >= maxAmount) break;
+\t\t\t}
+\t\t\treturn inserted;""")
+              ts = ts.replace("return inventoryStorage.extract(resource, maxAmount, transaction);",
+"""long extracted = 0;
+\t\t\tfor (SingleSlotStorage<ItemVariant> slot : slots) {
+\t\t\t\textracted += slot.extract(resource, maxAmount - extracted, transaction);
+\t\t\t\tif (extracted >= maxAmount) break;
+\t\t\t}
+\t\t\treturn extracted;""")
+              tp.write_text(ts)
 
           # Mojang renamed ResourceLocation to Identifier in 26.x.
           for jf in Path("core-src/src/main/java").rglob("*.java"):
