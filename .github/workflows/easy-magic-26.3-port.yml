@@ -95,6 +95,22 @@ jobs:
           )
           p.write_text(s)
           print(p.read_text())
+
+          # Minecraft 26.3 removed GameRenderer#setPostEffect(Identifier).
+          # The vanilla renderer still stores the selected shader in postEffectId,
+          # so assign that field directly instead of shadowing the removed setter.
+          p = Path("puzzleslib-src/Fabric/src/main/java/fuzs/puzzleslib/fabric/mixin/client/GameRendererFabricMixin.java")
+          s = p.read_text()
+          s = s.replace(
+              "EntitySpectatorShadersContextFabricImpl.getEntityShader(cameraEntity).ifPresent(this::setPostEffect);",
+              "EntitySpectatorShadersContextFabricImpl.getEntityShader(cameraEntity).ifPresent((Identifier id) -> this.postEffectId = id);"
+          )
+          s = s.replace(
+              "\n    @Shadow\n    protected abstract void setPostEffect(Identifier id);",
+              ""
+          )
+          p.write_text(s)
+          print(p.read_text())
           PY
 
       - name: Remove Puzzles datagen-only APIs not yet ported to 26.3
