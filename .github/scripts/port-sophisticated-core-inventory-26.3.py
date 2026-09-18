@@ -353,3 +353,15 @@ for jf in java_root.rglob("*.java"):
         jf.write_text(new)
 
 print("Applied MobSpawnType -> EntitySpawnReason migration.")
+
+
+# Player feedback split in 26.x: system chat vs overlay/actionbar.
+for jf in java_root.rglob("*.java"):
+    txt = jf.read_text(errors="ignore")
+    new = re.sub(r'\.displayClientMessage\((.+?),\s*false\)', r'.sendSystemMessage(\1)', txt)
+    new = re.sub(r'\.displayClientMessage\((.+?),\s*true\)', r'.sendOverlayMessage(\1)', new)
+    new = new.replace(".getAllKeys()", ".keySet()")
+    if new != txt:
+        jf.write_text(new)
+
+print("Applied Player feedback split and CompoundTag.keySet migration.")
