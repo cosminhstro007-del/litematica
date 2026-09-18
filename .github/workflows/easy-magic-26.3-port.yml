@@ -96,20 +96,19 @@ jobs:
           p.write_text(s)
           print(p.read_text())
 
-          # Minecraft 26.3 removed GameRenderer#setPostEffect(Identifier).
-          # The vanilla renderer still stores the selected shader in postEffectId,
-          # so assign that field directly instead of shadowing the removed setter.
+          # Spectator post-processing internals were removed/refactored in Minecraft 26.3.
+          # Easy Magic never uses Puzzles Lib's EntitySpectatorShaders API, so keep this
+          # compatibility mixin present but intentionally inert for the Easy Magic runtime build.
           p = Path("puzzleslib-src/Fabric/src/main/java/fuzs/puzzleslib/fabric/mixin/client/GameRendererFabricMixin.java")
-          s = p.read_text()
-          s = s.replace(
-              "EntitySpectatorShadersContextFabricImpl.getEntityShader(cameraEntity).ifPresent(this::setPostEffect);",
-              "EntitySpectatorShadersContextFabricImpl.getEntityShader(cameraEntity).ifPresent((Identifier id) -> this.postEffectId = id);"
-          )
-          s = s.replace(
-              "\n    @Shadow\n    protected abstract void setPostEffect(Identifier id);",
-              ""
-          )
-          p.write_text(s)
+          p.write_text("""package fuzs.puzzleslib.fabric.mixin.client;
+
+import net.minecraft.client.renderer.GameRenderer;
+import org.spongepowered.asm.mixin.Mixin;
+
+@Mixin(GameRenderer.class)
+abstract class GameRendererFabricMixin {
+}
+""")
           print(p.read_text())
           PY
 
@@ -224,7 +223,7 @@ jobs:
         working-directory: puzzleslib-src
         run: |
           chmod +x ./gradlew
-          ./gradlew :Fabric:clean :Fabric:build --stacktrace
+          ./gradlew :Fabric:clean :Fabric:jar --stacktrace
           find Fabric/build/libs -maxdepth 1 -type f -ls
 
       - name: Prepare latest Puzzles Lib dependency
@@ -393,7 +392,7 @@ jobs:
         working-directory: easymagic-src
         run: |
           chmod +x ./gradlew
-          ./gradlew :Fabric:clean :Fabric:build --stacktrace
+          ./gradlew :Fabric:clean :Fabric:jar --stacktrace
           find Fabric/build/libs -maxdepth 1 -type f -ls
 
       - name: Select Easy Magic Fabric jar
