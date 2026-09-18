@@ -1136,3 +1136,51 @@ if dye.exists():
     dye.write_text(txt)
 
 print("Restored common block extensions, ported fluid context and dye pair, removed unused SFL component handler.")
+
+
+# Close the final Fabric 26.3 common-pass API renames.
+ceh = java_root / "net/p3pp3rf1y/sophisticatedcore/common/CommonEventHandler.java"
+if ceh.exists():
+    txt = ceh.read_text(errors="ignore")
+    txt = txt.replace(
+        "net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents",
+        "net.fabricmc.fabric.api.event.lifecycle.v1.ServerLevelEvents",
+    )
+    txt = txt.replace("ServerWorldEvents.UNLOAD", "ServerLevelEvents.UNLOAD")
+    txt = txt.replace("ServerTickEvents.END_WORLD_TICK", "ServerTickEvents.END_LEVEL_TICK")
+    ceh.write_text(txt)
+
+hopper = java_root / "net/p3pp3rf1y/sophisticatedcore/mixin/common/HopperBlockEntityMixin.java"
+if hopper.exists():
+    txt = hopper.read_text(errors="ignore")
+    txt = txt.replace(
+        "net.fabricmc.fabric.api.transfer.v1.item.InventoryStorage",
+        "net.fabricmc.fabric.api.transfer.v1.item.ContainerStorage",
+    )
+    txt = txt.replace("InventoryStorage.of(", "ContainerStorage.of(")
+    hopper.write_text(txt)
+
+mf = java_root / "net/p3pp3rf1y/sophisticatedcore/init/ModFluids.java"
+if mf.exists():
+    txt = mf.read_text(errors="ignore")
+    txt = txt.replace("import io.github.fabricators_of_create.porting_lib.fluids.PortingLibFluids;\n", "")
+    txt = txt.replace(
+        "import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;",
+        "import net.fabricmc.fabric.api.creativetab.v1.FabricCreativeModeTab;",
+    )
+    txt = txt.replace("FabricItemGroup.builder()", "FabricCreativeModeTab.builder()")
+    txt = re.sub(
+        r'\n\s*public static final DeferredRegister<FluidType> FLUID_TYPES = .*?;\n',
+        '\n',
+        txt,
+    )
+    txt = re.sub(
+        r'public static final Supplier<FluidType> XP_FLUID_TYPE = FLUID_TYPES\.register\("experience", \(\) -> new FluidType\((.*?)\)\);',
+        r'public static final FluidType XP_FLUID_TYPE_VALUE = new FluidType(\1);\n\tpublic static final Supplier<FluidType> XP_FLUID_TYPE = () -> XP_FLUID_TYPE_VALUE;',
+        txt,
+        flags=re.S,
+    )
+    txt = txt.replace("\n\t\tFLUID_TYPES.register();", "")
+    mf.write_text(txt)
+
+print("Closed final common-pass Fabric 26.3 API renames.")
