@@ -59,7 +59,7 @@ jobs:
                   it.officialMojangMappings()
                   it.parchment("org.parchmentmc.data:parchment-${project.parchment_minecraft_version}:${project.parchment_mappings_version}@zip")
               })""",
-              "mappings loom.officialMojangMappings()"
+              ""
           )
           s = s.replace(
               'modImplementation "net.fabricmc.fabric-api:fabric-api:FABRIC_API_VERSION"',
@@ -67,6 +67,16 @@ jobs:
           )
           s = s.replace("languageVersion = JavaLanguageVersion.of(21)", "languageVersion = JavaLanguageVersion.of(25)")
           s = s.replace("toolchain.languageVersion = JavaLanguageVersion.of(21)", "toolchain.languageVersion = JavaLanguageVersion.of(25)")
+
+          # 26.x Loom no longer exposes the old standalone sponge-mixin artifact this dev-only
+          # hotswap block expects. It is irrelevant for CI/runtime builds, so remove it.
+          marker_start = "            try {\\n                afterEvaluate {"
+          marker_end = "            }\\n        }\\n\\n        server {"
+          if marker_start in s:
+              start = s.index(marker_start)
+              end = s.index(marker_end, start)
+              s = s[:start] + "        }\\n\\n        server {" + s[end + len(marker_end):]
+
           p.write_text(s)
 
           print(Path("sfl-src/gradle.properties").read_text())
