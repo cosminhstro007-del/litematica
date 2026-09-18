@@ -8,6 +8,7 @@ import it.unimi.dsi.fastutil.objects.ReferenceArrayList;
 import org.apache.logging.log4j.Logger;
 import org.joml.*;
 
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.renderpearl.api.buffers.GpuBuffer;
