@@ -20,6 +20,39 @@ jobs:
           ref: 1.21.1-fabric-dev
           path: sfl-src
 
+      - name: Checkout Sophisticated Core Fabric dev
+        uses: actions/checkout@v6
+        with:
+          repository: Salandora/SophisticatedCore
+          ref: 1.21.x-fabric-dev
+          path: core-src
+
+      - name: Checkout Sophisticated Backpacks Fabric dev
+        uses: actions/checkout@v6
+        with:
+          repository: Salandora/SophisticatedBackpacks
+          ref: 1.21.x-fabric-dev
+          path: backpacks-src
+
+      - name: Checkout Sophisticated Storage Fabric dev
+        uses: actions/checkout@v6
+        with:
+          repository: Salandora/SophisticatedStorage
+          ref: 1.21.x-fabric-dev
+          path: storage-src
+
+      - name: Audit Fabric compatibility dependencies
+        shell: bash
+        run: |
+          for dir in core-src backpacks-src storage-src; do
+            echo "===== $dir Porting Lib imports ====="
+            grep -RhoE 'import io[.]github[.]fabricators_of_create[.]porting_lib[^;]*;' "$dir/src" 2>/dev/null | sort -u || true
+            echo "===== $dir SFL imports ====="
+            grep -RhoE 'import com[.]github[.]salandora[.]sophisticatedfabriclib[^;]*;' "$dir/src" 2>/dev/null | sort -u || true
+            echo "===== $dir extension calls ====="
+            grep -RhoE 'sophisticatedFabricLibrary_[A-Za-z0-9_]+' "$dir/src" 2>/dev/null | sort -u || true
+          done
+
       - name: Setup Java 25
         uses: actions/setup-java@v5
         with:
