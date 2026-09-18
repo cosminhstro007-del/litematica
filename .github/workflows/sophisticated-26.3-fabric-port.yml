@@ -137,6 +137,14 @@ jobs:
           data_dir = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/data")
           if data_dir.exists():
               shutil.rmtree(data_dir)
+          for rel in [
+              "net/p3pp3rf1y/sophisticatedcore/crafting/SCShapedRecipeBuilder.java",
+              "net/p3pp3rf1y/sophisticatedcore/crafting/SCShapelessRecipeBuilder.java",
+              "net/p3pp3rf1y/sophisticatedcore/crafting/ShapelessBasedRecipeBuilder.java",
+          ]:
+              q = Path("core-src/src/main/java") / rel
+              if q.exists():
+                  q.unlink()
 
           # Mojang renamed ResourceLocation to Identifier in 26.x.
           for jf in Path("core-src/src/main/java").rglob("*.java"):
