@@ -244,3 +244,17 @@ for rel in random_files:
         jf.write_text(re.sub(r"\.random\b", ".getRandom()", txt))
 
 print("Applied Minecraft 26.x NBT/Level/drop/recipe compatibility patches.")
+
+
+# Container click input was renamed in Minecraft 26.x.
+for jf in java_root.rglob("*.java"):
+    txt = jf.read_text(errors="ignore")
+    new = txt.replace(
+        "net.minecraft.world.inventory.ClickType",
+        "net.minecraft.world.inventory.ContainerInput",
+    )
+    new = re.sub(r"\bClickType\b", "ContainerInput", new)
+    if new != txt:
+        jf.write_text(new)
+
+print("Applied ClickType -> ContainerInput migration.")
