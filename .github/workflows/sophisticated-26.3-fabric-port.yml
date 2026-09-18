@@ -58,6 +58,18 @@ jobs:
           print("26.3 access widener:")
           print(aw.read_text())
 
+          # Minecraft 26.x renamed ResourceLocation to Identifier in official names.
+          java_root = Path("sfl-src/src/main/java")
+          changed = 0
+          for jp in java_root.rglob("*.java"):
+              js = jp.read_text()
+              ns = js.replace("net.minecraft.resources.ResourceLocation", "net.minecraft.resources.Identifier")
+              ns = ns.replace("ResourceLocation", "Identifier")
+              if ns != js:
+                  jp.write_text(ns)
+                  changed += 1
+          print("Identifier migration touched Java files:", changed)
+
           p = Path("sfl-src/build.gradle")
           p.write_text(r'''plugins {
               id 'net.fabricmc.fabric-loom' version '1.17.+'
