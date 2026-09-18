@@ -20,6 +20,13 @@ jobs:
           ref: 1.21.x-fabric-dev
           path: core-src
 
+      - name: Checkout Sophisticated Fabric Lib dev
+        uses: actions/checkout@v6
+        with:
+          repository: Salandora/SophisticatedFabricLib
+          ref: 1.21.1-fabric-dev
+          path: sfl-src
+
       - name: Setup Java 25
         uses: actions/setup-java@v5
         with:
@@ -84,6 +91,47 @@ jobs:
 
           # Ask javac for the complete migration surface instead of stopping at 100 errors.
           s += "\n\ntasks.withType(JavaCompile).configureEach { options.compilerArgs += ['-Xmaxerrs', '2000'] }\n"
+          # Vendor the common/runtime pieces of Sophisticated Fabric Lib.
+          import shutil
+          sfl_root = Path("sfl-src/src/main/java/com/github/salandora/sophisticatedfabriclib")
+          core_sfl_root = Path("core-src/src/main/java/com/github/salandora/sophisticatedfabriclib")
+          for rel in [
+              "util",
+              "transfer/api/v1",
+              "fluid/api/v1",
+              "energy/api/v1"
+          ]:
+              src = sfl_root / rel
+              dst = core_sfl_root / rel
+              if src.exists():
+                  shutil.copytree(src, dst, dirs_exist_ok=True)
+
+          # Replace Porting Lib APIs that have direct SFL equivalents.
+          import_map = {
+              "io.github.fabricators_of_create.porting_lib.util.DeferredRegister": "com.github.salandora.sophisticatedfabriclib.util.DeferredRegister",
+              "io.github.fabricators_of_create.porting_lib.util.DeferredHolder": "com.github.salandora.sophisticatedfabriclib.util.DeferredHolder",
+              "io.github.fabricators_of_create.porting_lib.fluids.BaseFlowingFluid": "com.github.salandora.sophisticatedfabriclib.fluid.api.v1.BaseFlowingFluid",
+              "io.github.fabricators_of_create.porting_lib.fluids.FluidStack": "com.github.salandora.sophisticatedfabriclib.fluid.api.v1.FluidStack",
+              "io.github.fabricators_of_create.porting_lib.fluids.FluidType": "com.github.salandora.sophisticatedfabriclib.fluid.api.v1.FluidType",
+              "io.github.fabricators_of_create.porting_lib.transfer.fluid.SimpleFluidContent": "com.github.salandora.sophisticatedfabriclib.fluid.api.v1.SimpleFluidContent",
+              "io.github.fabricators_of_create.porting_lib.transfer.fluid.block.BucketPickupHandlerWrapper": "com.github.salandora.sophisticatedfabriclib.fluid.api.v1.BucketPickupHandlerWrapper",
+              "io.github.fabricators_of_create.porting_lib.transfer.item.ItemStackHandler": "com.github.salandora.sophisticatedfabriclib.transfer.api.v1.ItemStackHandler",
+              "io.github.fabricators_of_create.porting_lib.transfer.TransferUtil": "com.github.salandora.sophisticatedfabriclib.transfer.api.v1.TransferUtil",
+              "io.github.fabricators_of_create.porting_lib.transfer.MutableContainerItemContext": "com.github.salandora.sophisticatedfabriclib.transfer.api.v1.ItemStackContainerItemContext",
+          }
+          for jf in Path("core-src/src/main/java").rglob("*.java"):
+              txt = jf.read_text(errors="ignore")
+              new = txt
+              for old, repl in import_map.items():
+                  new = new.replace(old, repl)
+              if new != txt:
+                  jf.write_text(new)
+
+          # Datagen classes are not required by the runtime mods.
+          data_dir = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/data")
+          if data_dir.exists():
+              shutil.rmtree(data_dir)
+
           # Mojang renamed ResourceLocation to Identifier in 26.x.
           for jf in Path("core-src/src/main/java").rglob("*.java"):
               txt = jf.read_text(errors="ignore")
