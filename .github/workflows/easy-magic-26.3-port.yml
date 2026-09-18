@@ -91,9 +91,59 @@ jobs:
           )
           c.write_text(s)
 
+          # Minecraft 26.3: BlockEntity.type became private final. Easy Magic intentionally
+          # swaps the vanilla enchanting table type for its registered custom type.
+          ct = Path("easymagic-src/Common/src/main/resources/easymagic.classtweaker")
+          s = ct.read_text()
+          if "net/minecraft/world/level/block/entity/BlockEntity   type" not in s:
+              s += (
+                  "\naccessible  field   net/minecraft/world/level/block/entity/BlockEntity   type   Lnet/minecraft/world/level/block/entity/BlockEntityType;"
+                  "\nmutable     field   net/minecraft/world/level/block/entity/BlockEntity   type   Lnet/minecraft/world/level/block/entity/BlockEntityType;\n"
+              )
+          ct.write_text(s)
+
+          # ResourceKeyHelper was removed from Puzzles Lib 26.3. Inline its vanilla implementation.
+          p2 = Path("easymagic-src/Common/src/main/java/fuzs/easymagic/common/client/util/EnchantmentTooltipHelper.java")
+          s = p2.read_text()
+          s = s.replace("import fuzs.puzzleslib.common.api.init.v3.registry.ResourceKeyHelper;\n", "")
+          s = s.replace(
+              "return ResourceKeyHelper.getTranslationKey(ModRegistry.ENCHANTING_MENU_TYPE.key()) + \".\" + string;",
+              "return Util.makeDescriptionId(Registries.elementsDirPath(ModRegistry.ENCHANTING_MENU_TYPE.key().registryKey()), ModRegistry.ENCHANTING_MENU_TYPE.key().identifier()) + \".\" + string;"
+          )
+          p2.write_text(s)
+
+          # Minecraft 26.3 inventory/entity mutations now require explicit prediction semantics.
+          p2 = Path("easymagic-src/Common/src/main/java/fuzs/easymagic/common/world/inventory/ModEnchantmentMenu.java")
+          s = p2.read_text()
+          if "import net.minecraft.util.Prediction;" not in s:
+              s = s.replace("import net.minecraft.server.level.ServerPlayer;\n", "import net.minecraft.server.level.ServerPlayer;\nimport net.minecraft.util.Prediction;\n")
+          s = s.replace(
+              "player.getInventory().placeItemBackInInventory(itemStack);",
+              "player.getInventory().placeItemBackInInventory(itemStack, Prediction.SERVER_ONLY);"
+          )
+          s = s.replace(
+              "player.drop(itemStack, false);",
+              "player.drop(itemStack, false, Prediction.SERVER_ONLY);"
+          )
+          p2.write_text(s)
+
+          # PoseStack now exposes direct axis rotation helpers instead of mulPose(Quaternionf).
+          p2 = Path("easymagic-src/Common/src/main/java/fuzs/easymagic/common/client/renderer/blockentity/ModEnchantTableRenderer.java")
+          s = p2.read_text()
+          s = s.replace("poseStack.mulPose(Axis.YP.rotationDegrees(horizontalAngle));", "poseStack.rotateDegrees(Axis.YP, horizontalAngle);")
+          s = s.replace("poseStack.mulPose(Axis.XP.rotationDegrees(90.0F));", "poseStack.rotateDegrees(Axis.XP, 90.0F);")
+          s = s.replace("poseStack.mulPose(Axis.YP.rotation(renderState.time / 20.0F));", "poseStack.rotate(Axis.YP, renderState.time / 20.0F);")
+          s = s.replace("poseStack.mulPose(Axis.YP.rotationDegrees(j * angle + renderState.time));", "poseStack.rotateDegrees(Axis.YP, j * angle + renderState.time);")
+          s = s.replace(
+              "poseStack.mulPose(Axis.YP.rotationDegrees(rotateItems ? renderState.time % 360.0F : 90.0F));",
+              "poseStack.rotateDegrees(Axis.YP, rotateItems ? renderState.time % 360.0F : 90.0F);"
+          )
+          p2.write_text(s)
+
           print(p.read_text())
           print(b.read_text())
           print(c.read_text())
+          print(ct.read_text())
           PY
 
       - name: Build Fabric Easy Magic
