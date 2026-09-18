@@ -67,6 +67,16 @@ jobs:
           s=s.replace("sourceCompatibility = JavaVersion.VERSION_21", "sourceCompatibility = JavaVersion.VERSION_25")
           s=s.replace("targetCompatibility = JavaVersion.VERSION_21", "targetCompatibility = JavaVersion.VERSION_25")
           s=s.replace("languageVersion = JavaLanguageVersion.of(21)", "languageVersion = JavaLanguageVersion.of(25)")
+          # Minecraft 26.x ships unobfuscated; Loom 1.17 uses plain Gradle dependency configurations.
+          for old, new in [
+              ("modImplementation", "implementation"),
+              ("modApi", "implementation"),
+              ("modCompileOnlyApi", "compileOnly"),
+              ("modCompileOnly", "compileOnly"),
+              ("modLocalRuntime", "runtimeOnly"),
+          ]:
+              s = s.replace(old, new)
+
           # Porting Lib has no 26.3 artifacts. Remove dependency loop; target-specific shims are added next.
           s=re.sub(r'\n\s*for \(def module in porting_lib_modules\.split\(\',\'\)\) \{.*?\n\s*\}\n', '\n', s, count=1, flags=re.S)
           # Ask javac for the complete migration surface instead of stopping at 100 errors.
