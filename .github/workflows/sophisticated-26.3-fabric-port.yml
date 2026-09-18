@@ -84,6 +84,17 @@ jobs:
 
           # Ask javac for the complete migration surface instead of stopping at 100 errors.
           s += "\n\ntasks.withType(JavaCompile).configureEach { options.compilerArgs += ['-Xmaxerrs', '2000'] }\n"
+          # Mojang renamed ResourceLocation to Identifier in 26.x.
+          for jf in Path("core-src/src/main/java").rglob("*.java"):
+              txt = jf.read_text(errors="ignore")
+              new = txt.replace("net.minecraft.resources.ResourceLocation", "net.minecraft.resources.Identifier")
+              new = new.replace("ResourceLocation.fromNamespaceAndPath", "Identifier.fromNamespaceAndPath")
+              new = new.replace("ResourceLocation.tryParse", "Identifier.tryParse")
+              new = new.replace("ResourceLocation.parse", "Identifier.parse")
+              new = new.replace("ResourceLocation", "Identifier")
+              if new != txt:
+                  jf.write_text(new)
+
           # Minecraft 26.3 uses the official/unobfuscated namespace in access wideners.
           aw = Path("core-src/src/main/resources/sophisticatedcore.accesswidener")
           if aw.exists():
