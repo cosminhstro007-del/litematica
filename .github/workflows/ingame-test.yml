@@ -1,0 +1,122 @@
+name: ingame-litematica-test
+on:
+  push:
+    branches: [ "DEV/26.3" ]
+
+jobs:
+  ingame:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Prepare display
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb xdotool imagemagick mesa-utils libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers
+          chmod +x ./gradlew
+
+      - name: Launch and drive Minecraft
+        shell: bash
+        run: |
+          set -u
+          mkdir -p ingame-proof
+          Xvfb :99 -screen 0 1280x720x24 +extension GLX +render -noreset > ingame-proof/xvfb.out 2>&1 &
+          xvfb_pid=$!
+          export DISPLAY=:99
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
+          sleep 2
+
+          ./gradlew runClient --stacktrace > ingame-proof/runclient.out 2>&1 &
+          client_pid=$!
+
+          wid=""
+          for i in $(seq 1 90); do
+            wid=$(xdotool search --onlyvisible --name "Minecraft" 2>/dev/null | tail -n 1 || true)
+            if [ -n "$wid" ] && grep -q "BlockModelCacheSchematic: refreshing model cache" run/logs/latest.log 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          if [ -z "$wid" ]; then
+            echo "Minecraft window not found"
+            xwininfo -root -tree > ingame-proof/window-tree.txt 2>&1 || true
+            kill "$client_pid" "$xvfb_pid" 2>/dev/null || true
+            exit 2
+          fi
+
+          xdotool windowactivate --sync "$wid" || true
+          xdotool windowmove "$wid" 0 0 || true
+          sleep 2
+          xdotool getwindowgeometry --shell "$wid" > ingame-proof/window-geometry.txt
+          source ingame-proof/window-geometry.txt
+          import -display :99 -window root ingame-proof/01-main-menu.png
+
+          # Title screen: Singleplayer is the first large centered button.
+          x=$((WIDTH / 2))
+          y=$((HEIGHT / 4 + 58))
+          xdotool mousemove --window "$wid" "$x" "$y" click 1
+          sleep 4
+          import -display :99 -window root ingame-proof/02-singleplayer.png
+
+          # World list screen: Create New World button (bottom-left of the centered button row).
+          x=$((WIDTH / 2 - 80))
+          y=$((HEIGHT - 42))
+          xdotool mousemove --window "$wid" "$x" "$y" click 1
+          sleep 4
+          import -display :99 -window root ingame-proof/03-create-world.png
+
+          # Create World screen: click the create button at the bottom-left.
+          x=$((WIDTH / 2 - 80))
+          y=$((HEIGHT - 28))
+          xdotool mousemove --window "$wid" "$x" "$y" click 1
+          sleep 2
+
+          entered=0
+          for i in $(seq 1 120); do
+            if grep -Eiq "joined the game|Local game hosted on port|Starting integrated minecraft server" run/logs/latest.log 2>/dev/null; then
+              entered=1
+            fi
+            if [ "$entered" -eq 1 ] && grep -Eiq "joined the game|Local game hosted on port" run/logs/latest.log 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          import -display :99 -window root ingame-proof/04-in-world.png
+
+          # Litematica default main-menu hotkey.
+          xdotool windowactivate --sync "$wid" || true
+          xdotool key --window "$wid" m
+          sleep 3
+          import -display :99 -window root ingame-proof/05-litematica-menu.png
+
+          cp run/logs/latest.log ingame-proof/latest.log || true
+          xwininfo -root -tree > ingame-proof/window-tree.txt 2>&1 || true
+
+          kill "$client_pid" "$xvfb_pid" 2>/dev/null || true
+
+          if [ "$entered" -ne 1 ]; then
+            echo "Did not confirm entry into a singleplayer world"
+            exit 3
+          fi
+
+          grep -Eiq "litematica 0\.28\.99-dev" ingame-proof/latest.log
+          grep -Eiq "Placement Manager calculated thread limit" ingame-proof/latest.log
+          grep -Eiq "BlockModelCacheSchematic: refreshing model cache" ingame-proof/latest.log
+
+      - name: Upload in-game proof
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ingame-proof
+          path: ingame-proof/
