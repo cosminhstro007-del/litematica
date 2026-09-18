@@ -236,6 +236,12 @@ jobs:
                   jf.unlink()
           print(f"Removed {len(client_removed)} client/package-info Java files for common migration pass")
 
+          # Optional third-party integrations are restored after the base runtime compiles.
+          for compat_name in ["chipped", "rei", "jei", "emi"]:
+              compat_dir = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/compat") / compat_name
+              if compat_dir.exists():
+                  shutil.rmtree(compat_dir)
+
           # Config is common/runtime code but references this client-facing enum. Keep a tiny
           # compile/runtime-compatible enum during the common pass; the full client source is restored later.
           sbp = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/client/gui/SortButtonsPosition.java")
