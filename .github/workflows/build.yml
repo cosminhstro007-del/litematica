@@ -62,7 +62,7 @@ jobs:
             exit 1
           fi
 
-          if grep -Eiq 'Mixin apply failed|Could not execute entrypoint|NoSuchMethodError|NoClassDefFoundError|ExceptionInInitializerError|VerifyError|ModResolutionException|Failed to create backend|Crash report saved' run/logs/latest.log; then
+          if grep -Eiq 'Mixin apply failed|Could not execute entrypoint|NoSuchMethodError|NoClassDefFoundError|ExceptionInInitializerError|VerifyError|ModResolutionException|Crash report saved' run/logs/latest.log; then
             echo "Fatal mod/client startup error detected"
             exit 1
           fi
@@ -70,6 +70,10 @@ jobs:
           grep -Eiq 'Loading Minecraft 26\.3' run/logs/latest.log
           grep -Eiq 'litematica 0\.28\.99-dev' run/logs/latest.log
           grep -Eiq 'malilib 0\.29\.99-dev' run/logs/latest.log
+          grep -Eiq 'Using graphics backend (OpenGL|Vulkan)' run/logs/latest.log
+          grep -Eiq 'Created window using SDL video driver' run/logs/latest.log
+          grep -Eiq 'Placement Manager calculated thread limit' run/logs/latest.log
+          grep -Eiq 'BlockModelCacheSchematic: refreshing model cache' run/logs/latest.log
 
       - name: capture runtime log
         if: always()
