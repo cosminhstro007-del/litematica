@@ -470,3 +470,45 @@ if tank.exists():
     tank.write_text(txt)
 
 print("Applied supplier, TagKey, inventory size, and FluidStack resource accessor fixes.")
+
+
+# Minecraft 26.x Slot#getNoItemIcon returns a single Identifier; the block atlas pair was removed.
+for rel in [
+    "net/p3pp3rf1y/sophisticatedcore/common/gui/SettingsContainerMenu.java",
+    "net/p3pp3rf1y/sophisticatedcore/common/gui/StorageContainerMenuBase.java",
+]:
+    jf = java_root / rel
+    if not jf.exists():
+        continue
+    txt = jf.read_text(errors="ignore")
+    txt = txt.replace(
+        "Map<Integer, Pair<Identifier, Identifier>> emptySlotIcons",
+        "Map<Integer, Identifier> emptySlotIcons",
+    )
+    txt = txt.replace(
+        "public Pair<Identifier, Identifier> getNoItemIcon()",
+        "public Identifier getNoItemIcon()",
+    )
+    txt = txt.replace(
+        "new Pair<>(InventoryMenu.BLOCK_ATLAS, textureName)",
+        "textureName",
+    )
+    txt = txt.replace(
+        "new Pair<>(InventoryMenu.BLOCK_ATLAS, StorageContainerMenuBase.EMPTY_UPGRADE_SLOT_BACKGROUND)",
+        "StorageContainerMenuBase.EMPTY_UPGRADE_SLOT_BACKGROUND",
+    )
+    txt = txt.replace(
+        "new Pair<>(InventoryMenu.BLOCK_ATLAS, SophisticatedCore.getRL(\"item/inaccessible_slot\"))",
+        "SophisticatedCore.getRL(\"item/inaccessible_slot\")",
+    )
+    txt = txt.replace(
+        "Pair<Identifier, Identifier> noItemIcon = storageWrapper.getInventoryHandler().getNoItemIcon(slot);",
+        "Identifier noItemIcon = storageWrapper.getInventoryHandler().getNoItemIcon(slot);",
+    )
+    txt = txt.replace(
+        "noItemSlotTextures.computeIfAbsent(noItemIcon.getSecond(), rl -> new HashSet<>()).add(slot);",
+        "noItemSlotTextures.computeIfAbsent(noItemIcon, rl -> new HashSet<>()).add(slot);",
+    )
+    jf.write_text(txt)
+
+print("Applied Minecraft 26.x single-Identifier slot icon API.")
