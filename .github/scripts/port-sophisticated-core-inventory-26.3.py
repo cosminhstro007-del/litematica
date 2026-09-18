@@ -437,3 +437,14 @@ if iw.exists():
     iw.write_text(txt)
 
 print("Applied Fabric Menu API, advancement trigger, and InventoryStorageWrapper class-name migrations.")
+
+
+# Minecraft 26.x item tag and recipe access migrations.
+for jf in java_root.rglob("*.java"):
+    txt = jf.read_text(errors="ignore")
+    new = txt.replace(".getTags()", ".typeHolder().tags()")
+    new = new.replace(".getRecipeManager()", ".recipeAccess()")
+    if new != txt:
+        jf.write_text(new)
+
+print("Applied ItemStack.typeHolder().tags and Level.recipeAccess migrations.")
