@@ -11,6 +11,7 @@ import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.phys.BlockHitResult;
 
 /**
@@ -30,7 +31,13 @@ public class MixinClientPlayerInteractionManager_easyPlace
             {
                 if (EasyPlaceUtils.shouldDoEasyPlaceActions())
                 {
-                    if (EasyPlaceUtils.handleEasyPlaceWithMessage())
+                    boolean handled = EasyPlaceUtils.handleEasyPlaceWithMessage();
+
+                    // When Easy Place is actively being used, never let the original
+                    // vanilla block placement fall through outside the schematic.
+                    // The actual Easy Place placement re-enters this method while
+                    // EasyPlaceUtils.isHandling() is true, so that placement is not blocked.
+                    if (handled || player.getItemInHand(hand).getItem() instanceof BlockItem)
                     {
                         cir.setReturnValue(InteractionResult.FAIL);
                     }
@@ -62,10 +69,14 @@ public class MixinClientPlayerInteractionManager_easyPlace
             // Prevent recursion, since the Easy Place mode can call this code again
             if (EasyPlaceUtils.isHandling() == false)
             {
-                if (EasyPlaceUtils.shouldDoEasyPlaceActions() &&
-                    EasyPlaceUtils.handleEasyPlaceWithMessage())
+                if (EasyPlaceUtils.shouldDoEasyPlaceActions())
                 {
-                    cir.setReturnValue(InteractionResult.FAIL);
+                    boolean handled = EasyPlaceUtils.handleEasyPlaceWithMessage();
+
+                    if (handled || player.getItemInHand(hand).getItem() instanceof BlockItem)
+                    {
+                        cir.setReturnValue(InteractionResult.FAIL);
+                    }
                 }
             }
         }
