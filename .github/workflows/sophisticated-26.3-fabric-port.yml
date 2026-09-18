@@ -60,7 +60,7 @@ jobs:
 
           p=Path("core-src/build.gradle")
           s=p.read_text()
-          s=s.replace("id 'fabric-loom' version '1.10.+'", "id 'fabric-loom' version '1.17.+'")
+          s=s.replace("id 'fabric-loom' version '1.10.+'", "id 'net.fabricmc.fabric-loom' version '1.17.+'")
           # 26.3 Loom supplies the mappings; old Parchment/official block cannot resolve 26.3.
           s=re.sub(r'\n\s*mappings\(loom\.layered \{.*?\n\s*\}\)\n', '\n', s, flags=re.S)
           s=s.replace("it.options.release = 21", "it.options.release = 25")
