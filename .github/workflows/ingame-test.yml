@@ -20,7 +20,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb xdotool imagemagick mesa-utils libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers
+          sudo apt-get install -y -qq xvfb xdotool imagemagick mesa-utils libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers openbox x11-utils
           chmod +x ./gradlew
 
       - name: Launch and drive Minecraft
@@ -40,7 +40,7 @@ jobs:
 
           wid=""
           for i in $(seq 1 90); do
-            wid=$(xdotool search --onlyvisible --name "Minecraft" 2>/dev/null | tail -n 1 || true)
+            wid=$(xdotool search --name "Minecraft" 2>/dev/null | tail -n 1 || true)
             if [ -n "$wid" ] && grep -q "BlockModelCacheSchematic: refreshing model cache" run/logs/latest.log 2>/dev/null; then
               break
             fi
@@ -49,8 +49,8 @@ jobs:
 
           if [ -z "$wid" ]; then
             echo "Minecraft window not found"
-            xwininfo -root -tree > ingame-proof/window-tree.txt 2>&1 || true
-            kill "$client_pid" "$xvfb_pid" 2>/dev/null || true
+            xwininfo -root -tree > ingame-proof/window-tree.txt 2>&1 || true\n            xdotool search --name ".*" getwindowname %@ > ingame-proof/window-names.txt 2>&1 || true
+            kill "$client_pid" "$openbox_pid" "$xvfb_pid" 2>/dev/null || true
             exit 2
           fi
 
