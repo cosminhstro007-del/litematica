@@ -27,8 +27,8 @@ public record ChunkRenderBatchDraw(
         boolean renderCollidingBlocks,
         boolean renderTranslucent,
         int maxIndicesRequired,
-        GpuBufferSlice[] dynamicTransforms,
-        GpuBufferSlice chunkFixUBO)
+        GpuBufferSlice[] dynamicTransforms
+        )
 {
     public void draw(RenderPass pass, final ChunkSectionLayerGroup group, final GpuSampler sampler, ProfilerFiller profiler)
     {
@@ -44,7 +44,6 @@ public record ChunkRenderBatchDraw(
         try
         {
             RenderSystem.bindDefaultUniforms(pass);
-            pass.setUniform("LegacyTerrainFix", this.chunkFixUBO);
             pass.setUniform("Sampler0", this.atlasTexture, sampler);
             pass.setUniform("Sampler2", mc.gameRenderer.lightmap(),
                             RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
