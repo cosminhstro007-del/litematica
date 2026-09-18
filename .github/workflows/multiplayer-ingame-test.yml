@@ -34,10 +34,6 @@ jobs:
                   }
                   client {
                       runDirectory = file("clientrun")
-                      programArguments.add("--quickPlayMultiplayer")
-                      programArguments.add("localhost:25565")
-                      programArguments.add("--quickPlayPath")
-                      programArguments.add("quickplay.json")
                       systemProperties.put("litematica.ci.ingame", "true")
                   }
               }
@@ -47,7 +43,7 @@ jobs:
       - name: Add temporary Litematica in-game verifier
         shell: bash
         run: |
-          python3 -c 'from pathlib import Path; p=Path("src/main/java/fi/dy/masa/litematica/scheduler/ClientTickHandler.java"); L=p.read_text().splitlines(); c=next(i for i,x in enumerate(L) if x.startswith("public class ClientTickHandler")); L[c+2:c+2]=["    private static boolean ciMenuRequested;","    private static boolean ciMenuVerified;"]; i=next(i for i,x in enumerate(L) if "if (mc.level != null && mc.player != null)" in x); j=i+2; L[j:j]=["            if (Boolean.getBoolean(\"litematica.ci.ingame\"))","            {","                if (ciMenuRequested == false)","                {","                    fi.dy.masa.malilib.gui.GuiBase.openGui(new fi.dy.masa.litematica.gui.GuiMainMenu());","                    ciMenuRequested = true;","                    fi.dy.masa.litematica.Litematica.LOGGER.info(\"[CI-INGAME] Requested Litematica main menu while connected to test world\");","                }","                else if (ciMenuVerified == false && mc.gui.screen() instanceof fi.dy.masa.litematica.gui.GuiMainMenu)","                {","                    ciMenuVerified = true;","                    fi.dy.masa.litematica.Litematica.LOGGER.info(\"[CI-INGAME] VERIFIED Litematica GuiMainMenu open while connected to test world\");","                }","            }"]; p.write_text(chr(10).join(L)+chr(10))'
+          python3 -c 'from pathlib import Path; p=Path("src/main/java/fi/dy/masa/litematica/scheduler/ClientTickHandler.java"); L=p.read_text().splitlines(); c=next(i for i,x in enumerate(L) if x.startswith("public class ClientTickHandler")); L[c+2:c+2]=["    private static boolean ciConnectionRequested;","    private static boolean ciMenuRequested;","    private static boolean ciMenuVerified;"]; i=next(i for i,x in enumerate(L) if "public void onClientTick(Minecraft mc)" in x); j=i+2; L[j:j]=["        if (Boolean.getBoolean(\"litematica.ci.ingame\") && mc.level == null && ciConnectionRequested == false)","        {","            ciConnectionRequested = true;","            var addr = net.minecraft.client.multiplayer.resolver.ServerAddress.parseString(\"localhost:25565\");","            var data = new net.minecraft.client.multiplayer.ServerData(\"Litematica CI\", \"localhost:25565\", net.minecraft.client.multiplayer.ServerData.Type.OTHER);","            net.minecraft.client.gui.screens.ConnectScreen.startConnecting(mc.gui.screen(), mc, addr, data, false, null);","            fi.dy.masa.litematica.Litematica.LOGGER.info(\"[CI-INGAME] Requested direct connection to local Minecraft 26.3 server\");","        }"]; i=next(i for i,x in enumerate(L) if "if (mc.level != null && mc.player != null)" in x); j=i+2; L[j:j]=["            if (Boolean.getBoolean(\"litematica.ci.ingame\"))","            {","                if (ciMenuRequested == false)","                {","                    fi.dy.masa.malilib.gui.GuiBase.openGui(new fi.dy.masa.litematica.gui.GuiMainMenu());","                    ciMenuRequested = true;","                    fi.dy.masa.litematica.Litematica.LOGGER.info(\"[CI-INGAME] Requested Litematica main menu while connected to test world\");","                }","                else if (ciMenuVerified == false && mc.gui.screen() instanceof fi.dy.masa.litematica.gui.GuiMainMenu)","                {","                    ciMenuVerified = true;","                    fi.dy.masa.litematica.Litematica.LOGGER.info(\"[CI-INGAME] VERIFIED Litematica GuiMainMenu open while connected to test world\");","                }","            }"]; p.write_text(chr(10).join(L)+chr(10))'
 
       - name: Start Minecraft 26.3 server
         shell: bash
@@ -86,7 +82,6 @@ jobs:
           set -e
 
           cp clientrun/logs/latest.log proof/latest.log 2>/dev/null || true
-          cp clientrun/quickplay.json proof/quickplay.json 2>/dev/null || true
           tail -n 500 proof/latest.log || true
 
           kill "$openbox_pid" "$xvfb_pid" 2>/dev/null || true
@@ -97,11 +92,11 @@ jobs:
             exit 1
           fi
 
+          grep -Fq "[CI-INGAME] Requested direct connection to local Minecraft 26.3 server" proof/latest.log
           grep -Fq "[CI-INGAME] VERIFIED Litematica GuiMainMenu open while connected to test world" proof/latest.log
           grep -Eiq "litematica 0\.28\.99-dev" proof/latest.log
           grep -Eiq "Placement Manager calculated thread limit" proof/latest.log
           grep -Eiq "BlockModelCacheSchematic: refreshing model cache" proof/latest.log
-          test -f proof/quickplay.json
 
       - name: Upload proof
         if: always()
