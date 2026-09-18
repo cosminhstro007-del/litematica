@@ -32,6 +32,29 @@ jobs:
           cat api-proof/ServerData.txt
           cat api-proof/ServerDataType.txt
           cat api-proof/TransferState.txt
+          echo "=== shader resource candidates ===" > api-proof/shader-list.txt
+          jar tf "$jarfile" | grep -E 'assets/minecraft/.+(terrain|chunk|solid|cutout|translucent).+\.(vsh|fsh|glsl)
+      - uses: actions/upload-artifact@v6
+        with:
+          name: api-proof
+          path: api-proof/
+ >> api-proof/shader-list.txt || true
+          jar tf "$jarfile" | grep -E 'assets/minecraft/shaders/.+\.(vsh|fsh|glsl)
+      - uses: actions/upload-artifact@v6
+        with:
+          name: api-proof
+          path: api-proof/
+ | head -n 300 >> api-proof/shader-list.txt || true
+          cat api-proof/shader-list.txt
+          mkdir -p api-proof/shaders
+          while read -r entry; do
+            case "$entry" in
+              assets/minecraft/*)
+                mkdir -p "api-proof/shaders/$(dirname "$entry")"
+                unzip -p "$jarfile" "$entry" > "api-proof/shaders/$entry" || true
+                ;;
+            esac
+          done < api-proof/shader-list.txt
       - uses: actions/upload-artifact@v6
         with:
           name: api-proof
