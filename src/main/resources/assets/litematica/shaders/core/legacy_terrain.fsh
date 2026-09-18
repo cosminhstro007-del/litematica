@@ -20,13 +20,14 @@ layout(location = 0) out vec4 fragColor;
 #endif
 
 vec4 calculateFinalColor(vec4 color) {
+    // Schematic preview blocks use camera-relative transforms that are separate from
+    // vanilla terrain fog state on 26.3. Applying vanilla terrain fog here can turn
+    // the entire schematic into FogColor (blue) even though atlas UVs are correct.
+    // Keep OIT accumulation behavior, but do not fog schematic preview pixels.
     #ifdef OIT_ACCUMULATE
     color = sampleColorForAccumulation(color);
-    vec4 fogColor = vec4(FogColor.rgb * color.a, FogColor.a);
-    #else
-    vec4 fogColor = FogColor;
     #endif
-    return apply_fog(color, sphericalVertexDistance, cylindricalVertexDistance, FogEnvironmentalStart, FogEnvironmentalEnd, FogRenderDistanceStart, FogRenderDistanceEnd, fogColor);
+    return color;
 }
 
 void main() {
@@ -36,9 +37,6 @@ void main() {
         color = sampleNearest(Sampler0, texCoord0, 1.0f / TextureSize) * vertexColor * ColorModulator;
     } else {
         color = (UseRgss == 1 ? sampleRGSS(Sampler0, texCoord0, 1.0f / TextureSize) : sampleNearest(Sampler0, texCoord0, 1.0f / TextureSize)) * vertexColor * ColorModulator;
-        #ifndef OIT_ALPHA_ONLY
-        color = mix(FogColor * vec4(1, 1, 1, color.a), color, chunkVisibility);
-        #endif
     }
     #ifdef ALPHA_CUTOUT
     if (color.a < ALPHA_CUTOUT) {
