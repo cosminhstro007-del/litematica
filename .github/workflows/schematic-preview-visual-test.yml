@@ -1,0 +1,263 @@
+name: schematic-preview-visual-test
+on:
+  push:
+    branches: [ "DEV/26.3" ]
+  workflow_dispatch:
+
+jobs:
+  preview-visual:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Prepare headless graphics
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb mesa-utils libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers openbox imagemagick
+          chmod +x ./gradlew
+          mkdir -p proof run
+          printf 'eula=true\n' > run/eula.txt
+          cat > run/server.properties <<'EOF'
+          gamemode=creative
+          difficulty=peaceful
+          view-distance=4
+          simulation-distance=4
+          online-mode=false
+          spawn-protection=0
+          EOF
+
+      - name: Generate 26.3 test world
+        shell: bash
+        run: |
+          set +e
+          timeout 70s ./gradlew runServer --args="nogui" > proof/server.out 2>&1
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
+            cat proof/server.out
+            exit "$code"
+          fi
+          test -f run/world/level.dat
+          mkdir -p run/saves
+          rm -rf run/saves/world
+          cp -a run/world run/saves/world
+
+      - name: Inject temporary schematic preview verifier
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path("src/main/java/fi/dy/masa/litematica/scheduler/ClientTickHandler.java")
+          s = p.read_text()
+
+          s = s.replace(
+              "public class ClientTickHandler implements IClientTickHandler\n{",
+              """public class ClientTickHandler implements IClientTickHandler
+{
+    private static int ciPreviewTicks;
+    private static int ciPreviewStage;
+    private static fi.dy.masa.litematica.schematic.LitematicaSchematic ciPreviewSchematic;
+    private static net.minecraft.core.BlockPos ciPreviewOrigin;"""
+          )
+
+          needle = """        if (mc.level != null && mc.player != null)
+        {
+            SelectionManager sm = DataManager.getSelectionManager();"""
+
+          inject = """        if (mc.level != null && mc.player != null)
+        {
+            if (Boolean.getBoolean("litematica.ci.preview"))
+            {
+                ciPreviewTicks++;
+
+                if (ciPreviewStage == 0 && ciPreviewTicks > 40)
+                {
+                    mc.player.setYRot(0.0F);
+                    mc.player.setXRot(4.0F);
+
+                    net.minecraft.core.BlockPos playerPos = mc.player.blockPosition();
+                    ciPreviewOrigin = new net.minecraft.core.BlockPos(playerPos.getX() - 3, playerPos.getY(), playerPos.getZ() + 7);
+
+                    net.minecraft.world.level.block.state.BlockState[] states = new net.minecraft.world.level.block.state.BlockState[] {
+                        net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),
+                        net.minecraft.world.level.block.Blocks.REDSTONE_BLOCK.defaultBlockState(),
+                        net.minecraft.world.level.block.Blocks.OAK_PLANKS.defaultBlockState(),
+                        net.minecraft.world.level.block.Blocks.GLASS.defaultBlockState(),
+                        net.minecraft.world.level.block.Blocks.REDSTONE_LAMP.defaultBlockState(),
+                        net.minecraft.world.level.block.Blocks.PISTON.defaultBlockState(),
+                        net.minecraft.world.level.block.Blocks.IRON_BLOCK.defaultBlockState()
+                    };
+
+                    for (int x = 0; x < states.length; x++)
+                    {
+                        mc.level.setBlock(ciPreviewOrigin.offset(x, 0, 0), states[x], 19);
+                        mc.level.setBlock(ciPreviewOrigin.offset(x, 1, 0), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 19);
+                    }
+
+                    mc.level.setBlock(
+                        ciPreviewOrigin.offset(1, 1, 0),
+                        net.minecraft.world.level.block.Blocks.REDSTONE_WIRE.defaultBlockState()
+                            .setValue(net.minecraft.world.level.block.RedStoneWireBlock.POWER, 15),
+                        19
+                    );
+                    mc.level.setBlock(
+                        ciPreviewOrigin.offset(4, 1, 0),
+                        net.minecraft.world.level.block.Blocks.REDSTONE_TORCH.defaultBlockState(),
+                        19
+                    );
+
+                    fi.dy.masa.litematica.selection.AreaSelection area = new fi.dy.masa.litematica.selection.AreaSelection();
+                    area.setName("CI Preview");
+                    area.setExplicitOrigin(ciPreviewOrigin);
+                    area.addSubRegionBox(
+                        new fi.dy.masa.litematica.selection.Box(
+                            ciPreviewOrigin,
+                            ciPreviewOrigin.offset(6, 1, 0),
+                            "main"
+                        ),
+                        true
+                    );
+
+                    ciPreviewSchematic = fi.dy.masa.litematica.schematic.LitematicaSchematic.createFromWorld(
+                        mc.level,
+                        area,
+                        new fi.dy.masa.litematica.schematic.LitematicaSchematic.SchematicSaveInfo(false, true),
+                        "CI",
+                        message -> {}
+                    );
+
+                    if (ciPreviewSchematic == null)
+                    {
+                        fi.dy.masa.litematica.Litematica.LOGGER.error("[CI-PREVIEW] Failed to create schematic");
+                        ciPreviewStage = 99;
+                    }
+                    else
+                    {
+                        ciPreviewSchematic.getMetadata().setName("CI Preview");
+                        fi.dy.masa.litematica.data.SchematicHolder.getInstance().addSchematic(ciPreviewSchematic, true);
+
+                        for (int x = 0; x < 7; x++)
+                        {
+                            mc.level.setBlock(ciPreviewOrigin.offset(x, 0, 0), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 19);
+                            mc.level.setBlock(ciPreviewOrigin.offset(x, 1, 0), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 19);
+                        }
+
+                        fi.dy.masa.litematica.schematic.placement.SchematicPlacement placement =
+                            fi.dy.masa.litematica.schematic.placement.SchematicPlacement.createFor(
+                                ciPreviewSchematic, ciPreviewOrigin, "CI Preview", true, true
+                            );
+                        DataManager.getSchematicPlacementManager().addSchematicPlacement(placement, false);
+                        DataManager.getSchematicPlacementManager().setSelectedSchematicPlacement(placement);
+                        DataManager.getSchematicPlacementManager().markAllPlacementsOfSchematicForRebuild(ciPreviewSchematic);
+
+                        fi.dy.masa.litematica.Litematica.LOGGER.info(
+                            "[CI-PREVIEW] Created test schematic at {} with normal + redstone blocks",
+                            ciPreviewOrigin
+                        );
+                        ciPreviewStage = 1;
+                        ciPreviewTicks = 0;
+                    }
+                }
+                else if (ciPreviewStage == 1 && ciPreviewTicks > 100)
+                {
+                    var sw = fi.dy.masa.litematica.world.SchematicWorldHandler.getSchematicWorld();
+                    if (sw != null)
+                    {
+                        fi.dy.masa.litematica.Litematica.LOGGER.info(
+                            "[CI-PREVIEW] Schematic world state at origin: {}",
+                            sw.getBlockState(ciPreviewOrigin)
+                        );
+                    }
+                    fi.dy.masa.litematica.Litematica.LOGGER.info("[CI-PREVIEW] READY_FOR_SCREENSHOT");
+                    ciPreviewStage = 2;
+                }
+            }
+
+            SelectionManager sm = DataManager.getSelectionManager();"""
+
+          if needle not in s:
+              raise SystemExit("tick insertion point not found")
+          s = s.replace(needle, inject)
+          p.write_text(s)
+          PY
+
+          cat >> build.gradle <<'EOF'
+
+          loom {
+              runs {
+                  client {
+                      programArguments.add("--quickPlaySingleplayer")
+                      programArguments.add("world")
+                      programArguments.add("--quickPlayPath")
+                      programArguments.add("quickplay.json")
+                      systemProperties.put("litematica.ci.preview", "true")
+                  }
+              }
+          }
+          EOF
+
+      - name: Compile injected preview verifier
+        shell: bash
+        run: ./gradlew compileJava --stacktrace
+
+      - name: Render schematic preview and capture screenshot
+        shell: bash
+        run: |
+          Xvfb :99 -screen 0 1280x720x24 +extension GLX +render -noreset > proof/xvfb.out 2>&1 &
+          xvfb_pid=$!
+          export DISPLAY=:99
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
+
+          openbox --sm-disable > proof/openbox.out 2>&1 &
+          openbox_pid=$!
+          sleep 2
+
+          ./gradlew runClient > proof/client.out 2>&1 &
+          client_pid=$!
+
+          ready=0
+          for i in $(seq 1 150); do
+            if grep -Fq "[CI-PREVIEW] READY_FOR_SCREENSHOT" run/logs/latest.log 2>/dev/null; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$client_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          cp run/logs/latest.log proof/latest.log 2>/dev/null || true
+          tail -n 500 proof/latest.log || true
+
+          if [ "$ready" -ne 1 ]; then
+            echo "Preview scene never became ready"
+            kill "$client_pid" "$openbox_pid" "$xvfb_pid" 2>/dev/null || true
+            exit 2
+          fi
+
+          sleep 5
+          import -display :99 -window root proof/schematic-preview.png
+          identify proof/schematic-preview.png
+
+          kill "$client_pid" "$openbox_pid" "$xvfb_pid" 2>/dev/null || true
+
+          grep -Fq "[CI-PREVIEW] Created test schematic" proof/latest.log
+          grep -Fq "[CI-PREVIEW] Schematic world state at origin: Block{minecraft:stone}" proof/latest.log
+          test -s proof/schematic-preview.png
+
+      - name: Upload preview proof
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: schematic-preview-visual-proof
+          path: proof/
