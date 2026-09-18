@@ -84,6 +84,17 @@ jobs:
           )
           p.write_text(s)
           print(p.read_text())
+
+          # Minecraft 26.3 changed ServerPlayer's internal item drop overload:
+          # (ItemStack, boolean, boolean) -> (ItemStack, boolean, Prediction).
+          p = Path("puzzleslib-src/Fabric/src/main/java/fuzs/puzzleslib/fabric/mixin/ServerPlayerFabricMixin.java")
+          s = p.read_text()
+          s = s.replace(
+              "Lnet/minecraft/server/level/ServerPlayer;drop(Lnet/minecraft/world/item/ItemStack;ZZ)Lnet/minecraft/world/entity/item/ItemEntity;",
+              "Lnet/minecraft/server/level/ServerPlayer;drop(Lnet/minecraft/world/item/ItemStack;ZLnet/minecraft/util/Prediction;)Lnet/minecraft/world/entity/item/ItemEntity;"
+          )
+          p.write_text(s)
+          print(p.read_text())
           PY
 
       - name: Remove Puzzles datagen-only APIs not yet ported to 26.3
