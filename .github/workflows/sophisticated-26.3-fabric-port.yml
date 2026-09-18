@@ -107,6 +107,20 @@ jobs:
           s = "\n".join(kept) + "\n"
           p.write_text(s)
 
+          # During the common/server migration pass, exclude 1.21 client-only sources.
+          # They are ported in a separate pass after storage/inventory logic compiles.
+          s = s.replace("apply from: getProject().file('gradle/package-info.gradle')", "")
+          p.write_text(s)
+
+          client_removed = []
+          for jf in Path("core-src/src/main/java").rglob("*.java"):
+              rel = str(jf).replace("\\\\", "/")
+              txt = jf.read_text(errors="ignore")
+              if "/client/" in rel or "import net.minecraft.client." in txt or "import com.mojang.blaze3d." in txt:
+                  client_removed.append(rel)
+                  jf.unlink()
+          print(f"Removed {len(client_removed)} client Java files for common migration pass")
+
           # The old buildSrc processor post-processes remapJar. 26.x is unobfuscated,
           # so post-process the ordinary jar instead.
           dp = Path("core-src/buildSrc/src/main/java/com/github/salandora/sophisticatedcorebuild/processor/DeduplicationProcessor.java")
