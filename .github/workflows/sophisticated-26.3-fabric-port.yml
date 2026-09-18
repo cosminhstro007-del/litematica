@@ -135,13 +135,13 @@ jobs:
           # Neutralize optional compat registration during the base/common pass.
           mc = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/init/ModCompat.java")
           if mc.exists():
-              mc.write_text("""package net.p3pp3rf1y.sophisticatedcore.init;
-
-public final class ModCompat {
-    private ModCompat() {}
-    public static void register() {}
-}
-""")
+              mc.write_text(
+                  "package net.p3pp3rf1y.sophisticatedcore.init;\n\n"
+                  "public final class ModCompat {\n"
+                  "    private ModCompat() {}\n"
+                  "    public static void register() {}\n"
+                  "}\n"
+              )
 
           # Client model geometry registration is restored in the client port pass.
           sc = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/SophisticatedCore.java")
