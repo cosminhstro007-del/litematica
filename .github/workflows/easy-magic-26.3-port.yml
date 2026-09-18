@@ -35,148 +35,24 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      - name: Remove broken 26.3 datagen-only APIs
-        shell: bash
-        run: |
-          rm -f puzzleslib-src/Common/src/main/java/fuzs/puzzleslib/common/api/client/data/v2/AbstractAtlasProvider.java
-          rm -f puzzleslib-src/Common/src/main/java/fuzs/puzzleslib/common/api/data/v2/AbstractAdvancementProvider.java
-          rm -f puzzleslib-src/Common/src/main/java/fuzs/puzzleslib/common/api/data/v2/AbstractLootProvider.java
-          rm -f puzzleslib-src/Common/src/main/java/fuzs/puzzleslib/common/api/client/data/v2/AbstractParticleProvider.java
-          rm -f puzzleslib-src/Common/src/main/java/fuzs/puzzleslib/common/api/data/v2/AbstractRecipeProvider.java
+      - name: Download cached Puzzles Lib 26.3 build
+        uses: actions/download-artifact@v6
+        with:
+          name: EasyMagic-26.3-Fabric
+          path: cached-puzzles
+          github-token: ${{ github.token }}
+          run-id: 35335403936
 
-      - name: Patch Puzzles Lib Fabric runtime APIs for Easy Magic
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          from textwrap import dedent
-
-          p = Path("puzzleslib-src/Fabric/src/main/java/fuzs/puzzleslib/fabric/impl/core/FabricCommonProxy.java")
-          s = p.read_text()
-          s = s.replace("import fuzs.puzzleslib.common.api.data.v2.AbstractRecipeProvider;\n", "")
-          start = s.index("    @Override\n    public RecipeOutput getTransformingRecipeOutput")
-          end = s.index("    @Override\n    public void synchronizeRecipeSerializer", start)
-          replacement = dedent("""
-              @Override
-              public RecipeOutput getTransformingRecipeOutput(RecipeOutput recipeOutput, UnaryOperator<Recipe<?>> operator) {
-                  throw new UnsupportedOperationException("Datagen recipe transforms are unavailable in the 26.3 runtime compatibility build");
-              }
-
-              @Override
-              public RecipeOutput getRecipeProviderOutput(CachedOutput output, String modId, PackOutput packOutput, HolderLookup.Provider registries, Consumer<CompletableFuture<?>> consumer) {
-                  throw new UnsupportedOperationException("Datagen recipe output is unavailable in the 26.3 runtime compatibility build");
-              }
-
-              @Override
-              public RecipeOutput getThrowingRecipeOutput() {
-                  throw new UnsupportedOperationException("Datagen recipe output is unavailable in the 26.3 runtime compatibility build");
-              }
-
-          """)
-          s = s[:start] + replacement + s[end:]
-          p.write_text(s)
-
-          p = Path("puzzleslib-src/Fabric/src/main/java/fuzs/puzzleslib/fabric/impl/core/context/GameplayContentContextFabricImpl.java")
-          p.write_text(dedent("""
-              package fuzs.puzzleslib.fabric.impl.core.context;
-
-              import fuzs.puzzleslib.common.api.core.v1.context.GameplayContentContext;
-              import net.minecraft.core.Holder;
-              import net.minecraft.world.level.ItemLike;
-              import net.minecraft.world.level.block.Block;
-              import org.apache.commons.lang3.math.Fraction;
-              import java.util.Objects;
-
-              public final class GameplayContentContextFabricImpl implements GameplayContentContext {
-                  @Override public void registerFuel(Holder<? extends ItemLike> fuelItem, Fraction fuelValue) {
-                      Objects.requireNonNull(fuelItem); Objects.requireNonNull(fuelValue);
-                  }
-                  @Override public void registerFlammable(Holder<Block> flammableBlock, int encouragement, int flammability) {
-                      Objects.requireNonNull(flammableBlock);
-                  }
-                  @Override public void registerCompostable(Holder<? extends ItemLike> compostableItem, float compostingChance) {
-                      Objects.requireNonNull(compostableItem);
-                  }
-                  @Override public void registerStrippable(Holder<Block> unstrippedBlock, Holder<Block> strippedBlock) {
-                      Objects.requireNonNull(unstrippedBlock); Objects.requireNonNull(strippedBlock);
-                  }
-                  @Override public void registerFlattenable(Holder<Block> unflattenedBlock, Holder<Block> flattenedBlock) {
-                      Objects.requireNonNull(unflattenedBlock); Objects.requireNonNull(flattenedBlock);
-                  }
-                  @Override public void registerTillable(Holder<Block> untilledBlock, Holder<Block> tilledBlock) {
-                      Objects.requireNonNull(untilledBlock); Objects.requireNonNull(tilledBlock);
-                  }
-                  @Override public void registerOxidizable(Holder<Block> unoxidizedBlock, Holder<Block> oxidizedBlock) {
-                      Objects.requireNonNull(unoxidizedBlock); Objects.requireNonNull(oxidizedBlock);
-                  }
-                  @Override public void registerWaxable(Holder<Block> unwaxedBlock, Holder<Block> waxedBlock) {
-                      Objects.requireNonNull(unwaxedBlock); Objects.requireNonNull(waxedBlock);
-                  }
-              }
-          """))
-
-          p = Path("puzzleslib-src/Fabric/src/main/java/fuzs/puzzleslib/fabric/impl/biome/MobSpawnSettingsContextFabric.java")
-          p.write_text(dedent("""
-              package fuzs.puzzleslib.fabric.impl.biome;
-
-              import com.google.common.collect.ImmutableSet;
-              import fuzs.puzzleslib.common.api.biome.v1.MobSpawnSettingsContext;
-              import net.fabricmc.fabric.api.biome.v1.BiomeModificationContext;
-              import net.minecraft.core.registries.BuiltInRegistries;
-              import net.minecraft.util.random.Weighted;
-              import net.minecraft.world.entity.EntityType;
-              import net.minecraft.world.entity.MobCategory;
-              import net.minecraft.world.level.biome.MobSpawnSettings;
-              import org.jspecify.annotations.Nullable;
-              import java.util.List;
-              import java.util.Set;
-              import java.util.function.BiPredicate;
-
-              public record MobSpawnSettingsContextFabric(BiomeModificationContext.MobSpawnSettingsContext context) implements MobSpawnSettingsContext {
-                  @Override public void setCreatureGenerationProbability(float probability) { this.context.setCreatureGenerationProbability(probability); }
-                  @Override public void addSpawn(MobCategory mobCategory, int weight, MobSpawnSettings.SpawnerData spawnerData) { this.context.addSpawn(mobCategory, spawnerData, weight); }
-                  @Override public boolean removeSpawns(BiPredicate<MobCategory, MobSpawnSettings.SpawnerData> filter) { return this.context.removeSpawns(filter); }
-                  @Override public void setSpawnCost(EntityType<?> entityType, double energyBudget, double charge) { this.context.addMobCharge(entityType, charge, energyBudget); }
-                  @Override public boolean clearSpawnCost(EntityType<?> entityType) { this.context.clearMobCharge(entityType); return true; }
-                  @Override public List<Weighted<MobSpawnSettings.SpawnerData>> getSpawnerData(MobCategory mobCategory) { return this.context.getMobs(mobCategory); }
-                  @Override public Set<EntityType<?>> getEntityTypesWithSpawnCost() { return ImmutableSet.copyOf(BuiltInRegistries.ENTITY_TYPE); }
-                  @Override public MobSpawnSettings.@Nullable MobSpawnCost getSpawnCost(EntityType<?> entityType) { return null; }
-                  @Override public float getCreatureGenerationProbability() { return 0.0F; }
-              }
-          """))
-
-          p = Path("puzzleslib-src/Fabric/src/main/java/fuzs/puzzleslib/fabric/impl/core/context/BiomeModificationsContextFabricImpl.java")
-          s = p.read_text()
-          s = s.replace("new MobSpawnSettingsContextFabric(biome.getMobSettings(),\n                modificationContext.getMobSpawnSettings())",
-                        "new MobSpawnSettingsContextFabric(modificationContext.getMobSpawnSettings())")
-          p.write_text(s)
-
-          p = Path("puzzleslib-src/Fabric/src/main/java/fuzs/puzzleslib/fabric/impl/core/context/DataPackReloadListenersContextFabricImpl.java")
-          s = p.read_text()
-          s = s.replace("ResourceReloaderKeys.Server.RECIPES", 'Identifier.withDefaultNamespace("recipes")')
-          s = s.replace("ResourceReloaderKeys.Server.ADVANCEMENTS", 'Identifier.withDefaultNamespace("advancements")')
-          p.write_text(s)
-          PY
-
-      - name: Build Puzzles Lib 26.3 Fabric
-        working-directory: puzzleslib-src
-        run: |
-          chmod +x ./gradlew
-          ./gradlew :Fabric:clean :Fabric:build --stacktrace
-          find Fabric/build/libs -maxdepth 1 -type f -ls
-
-      - name: Prepare local Puzzles Lib dependency
+      - name: Prepare cached Puzzles Lib dependency
         shell: bash
         run: |
           mkdir -p easymagic-src/deps
-          jar="$(find puzzleslib-src/Fabric/build/libs -maxdepth 1 -type f -name '*+Fabric.jar' | head -1)"
-          if [ -z "$jar" ]; then
-            jar="$(find puzzleslib-src/Fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' ! -name '*javadoc*' ! -name '*dev*' | head -1)"
-          fi
+          jar="$(find cached-puzzles -type f -name 'PuzzlesLib-26.3-Fabric-26.3.0.jar' | head -1)"
           test -n "$jar"
           cp "$jar" easymagic-src/deps/puzzleslib-26.3.jar
           cp "$jar" PuzzlesLib-26.3-Fabric-26.3.0.jar
           unzip -p PuzzlesLib-26.3-Fabric-26.3.0.jar fabric.mod.json | tee puzzleslib-fabric-mod.json
+          grep -q '"puzzleslib"' puzzleslib-fabric-mod.json
 
       - name: Port Easy Magic source/build to Minecraft 26.3
         shell: bash
