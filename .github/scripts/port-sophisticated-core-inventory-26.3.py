@@ -512,3 +512,174 @@ for rel in [
     jf.write_text(txt)
 
 print("Applied Minecraft 26.x single-Identifier slot icon API.")
+
+
+# Port Sophisticated runtime recipe serializers to the 26.x recipe API.
+recipe_wrapper = java_root / "net/p3pp3rf1y/sophisticatedcore/crafting/RecipeWrapperSerializer.java"
+if recipe_wrapper.exists():
+    recipe_wrapper.write_text(r'''package net.p3pp3rf1y.sophisticatedcore.crafting;
+
+import com.mojang.serialization.MapCodec;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.item.crafting.RecipeSerializer;
+
+import java.util.function.Function;
+
+public final class RecipeWrapperSerializer {
+    private RecipeWrapperSerializer() {}
+
+    public static <T extends Recipe<?>, R extends Recipe<?> & IWrapperRecipe<T>> RecipeSerializer<R> create(
+            Function<T, R> initialize, RecipeSerializer<T> recipeSerializer) {
+        MapCodec<R> codec = recipeSerializer.codec().xmap(initialize, IWrapperRecipe::getCompose);
+        StreamCodec<RegistryFriendlyByteBuf, R> streamCodec = new StreamCodec<>() {
+            @Override
+            public R decode(RegistryFriendlyByteBuf buffer) {
+                return initialize.apply(recipeSerializer.streamCodec().decode(buffer));
+            }
+
+            @Override
+            public void encode(RegistryFriendlyByteBuf buffer, R value) {
+                recipeSerializer.streamCodec().encode(buffer, value.getCompose());
+            }
+        };
+        return new RecipeSerializer<>(codec, streamCodec);
+    }
+}
+''')
+
+upgrade_clear = java_root / "net/p3pp3rf1y/sophisticatedcore/crafting/UpgradeClearRecipe.java"
+if upgrade_clear.exists():
+    upgrade_clear.write_text(r'''package net.p3pp3rf1y.sophisticatedcore.crafting;
+
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.CustomRecipe;
+import net.minecraft.world.item.crafting.RecipeSerializer;
+import net.minecraft.world.level.Level;
+import net.p3pp3rf1y.sophisticatedcore.init.ModRecipes;
+import net.p3pp3rf1y.sophisticatedcore.upgrades.UpgradeItemBase;
+
+public class UpgradeClearRecipe extends CustomRecipe {
+    public UpgradeClearRecipe() {}
+
+    @Override
+    public boolean matches(CraftingInput inventory, Level level) {
+        boolean upgradePresent = false;
+        for (int i = 0; i < inventory.size(); i++) {
+            ItemStack stack = inventory.getItem(i);
+            if (!stack.isEmpty()) {
+                if (stack.getItem() instanceof UpgradeItemBase && !stack.getComponents().isEmpty() && !upgradePresent) {
+                    upgradePresent = true;
+                } else {
+                    return false;
+                }
+            }
+        }
+        return upgradePresent;
+    }
+
+    @Override
+    public ItemStack assemble(CraftingInput inventory) {
+        ItemStack upgrade = ItemStack.EMPTY;
+        for (int i = 0; i < inventory.size(); i++) {
+            ItemStack stack = inventory.getItem(i);
+            if (!stack.isEmpty() && stack.getItem() instanceof UpgradeItemBase) {
+                upgrade = stack;
+            }
+        }
+        return new ItemStack(upgrade.getItem(), 1);
+    }
+
+    @Override
+    public boolean canCraftInDimensions(int width, int height) {
+        return width >= 1 && height >= 1;
+    }
+
+    @Override
+    public RecipeSerializer<?> getSerializer() {
+        return ModRecipes.UPGRADE_CLEAR_SERIALIZER.get();
+    }
+}
+''')
+
+upgrade_next = java_root / "net/p3pp3rf1y/sophisticatedcore/crafting/UpgradeNextTierRecipe.java"
+if upgrade_next.exists():
+    upgrade_next.write_text(r'''package net.p3pp3rf1y.sophisticatedcore.crafting;
+
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.item.crafting.RecipeSerializer;
+import net.minecraft.world.item.crafting.ShapedRecipe;
+import net.p3pp3rf1y.sophisticatedcore.init.ModRecipes;
+import net.p3pp3rf1y.sophisticatedcore.upgrades.IUpgradeItem;
+
+import java.util.Optional;
+
+public class UpgradeNextTierRecipe extends ShapedRecipe implements IWrapperRecipe<ShapedRecipe> {
+    private final ShapedRecipe compose;
+
+    public UpgradeNextTierRecipe(ShapedRecipe compose) {
+        super(new Recipe.CommonInfo(compose.showNotification()),
+                new CraftingRecipe.CraftingBookInfo(compose.category(), compose.group()),
+                compose.pattern, compose.result);
+        this.compose = compose;
+    }
+
+    @Override
+    public ShapedRecipe getCompose() {
+        return compose;
+    }
+
+    @Override
+    public ItemStack assemble(CraftingInput inv) {
+        ItemStack nextTier = super.assemble(inv);
+        getUpgrade(inv).ifPresent(upgrade -> nextTier.components.setAll(upgrade.getComponents()));
+        return nextTier;
+    }
+
+    private Optional<ItemStack> getUpgrade(CraftingInput inv) {
+        for (int slot = 0; slot < inv.size(); slot++) {
+            ItemStack slotStack = inv.getItem(slot);
+            if (slotStack.getItem() instanceof IUpgradeItem) {
+                return Optional.of(slotStack);
+            }
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public boolean isSpecial() {
+        return true;
+    }
+
+    @Override
+    public RecipeSerializer<?> getSerializer() {
+        return ModRecipes.UPGRADE_NEXT_TIER_SERIALIZER.get();
+    }
+}
+''')
+
+mod_recipes = java_root / "net/p3pp3rf1y/sophisticatedcore/init/ModRecipes.java"
+if mod_recipes.exists():
+    txt = mod_recipes.read_text(errors="ignore")
+    txt = txt.replace("import net.minecraft.world.item.crafting.SimpleCraftingRecipeSerializer;\n", "")
+    if "import com.mojang.serialization.MapCodec;" not in txt:
+        txt = txt.replace("package net.p3pp3rf1y.sophisticatedcore.init;\n", "package net.p3pp3rf1y.sophisticatedcore.init;\n\nimport com.mojang.serialization.MapCodec;\nimport net.minecraft.network.codec.StreamCodec;\nimport net.minecraft.world.item.crafting.CustomRecipe;\nimport net.minecraft.world.item.crafting.ShapedRecipe;\n")
+    txt = txt.replace(
+        'RECIPE_SERIALIZERS.register("upgrade_next_tier", UpgradeNextTierRecipe.Serializer::new)',
+        'RECIPE_SERIALIZERS.register("upgrade_next_tier", () -> RecipeWrapperSerializer.create(UpgradeNextTierRecipe::new, ShapedRecipe.SERIALIZER))'
+    )
+    txt = txt.replace(
+        'public static final Supplier<SimpleCraftingRecipeSerializer<?>> UPGRADE_CLEAR_SERIALIZER = RECIPE_SERIALIZERS.register("upgrade_clear", () -> new SimpleCraftingRecipeSerializer<>(UpgradeClearRecipe::new));',
+        'public static final Supplier<RecipeSerializer<?>> UPGRADE_CLEAR_SERIALIZER = RECIPE_SERIALIZERS.register("upgrade_clear", () -> new RecipeSerializer<>(MapCodec.unit(UpgradeClearRecipe::new), StreamCodec.unit(new UpgradeClearRecipe())));'
+    )
+    if "net.p3pp3rf1y.sophisticatedcore.crafting.RecipeWrapperSerializer" not in txt:
+        txt = txt.replace("import net.p3pp3rf1y.sophisticatedcore.crafting.ItemEnabledCondition;\n",
+                          "import net.p3pp3rf1y.sophisticatedcore.crafting.ItemEnabledCondition;\nimport net.p3pp3rf1y.sophisticatedcore.crafting.RecipeWrapperSerializer;\n")
+    mod_recipes.write_text(txt)
+
+print("Ported runtime recipe serializers and upgrade recipes to Minecraft 26.x.")
