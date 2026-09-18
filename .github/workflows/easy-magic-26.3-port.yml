@@ -35,6 +35,22 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
+      - name: Patch Puzzles Lib runtime-only build
+        shell: bash
+        run: |
+          cat >> puzzleslib-src/Common/build.gradle.kts <<'EOF'
+
+sourceSets {
+    named("main") {
+        java {
+            exclude("fuzs/puzzleslib/common/api/data/v2/**")
+            exclude("fuzs/puzzleslib/common/api/client/data/v2/**")
+        }
+    }
+}
+EOF
+          tail -n 20 puzzleslib-src/Common/build.gradle.kts
+
       - name: Build Puzzles Lib 26.3 Fabric
         working-directory: puzzleslib-src
         run: |
@@ -78,12 +94,26 @@ jobs:
           s = b.read_text()
           s = s.replace(
               "modApi(sharedLibs.puzzleslib.fabric)",
-              'modApi(files("../deps/puzzleslib-26.3.jar"))\n    modApi(sharedLibs.forgeconfigapiport.fabric)'
+              'modApi(files("../deps/puzzleslib-26.3.jar"))'
           )
           b.write_text(s)
 
+          c = Path("easymagic-src/Common/build.gradle.kts")
+          s = c.read_text()
+          s += """
+sourceSets {
+    named("main") {
+        java {
+            exclude("fuzs/easymagic/common/data/**")
+        }
+    }
+}
+"""
+          c.write_text(s)
+
           print(p.read_text())
           print(b.read_text())
+          print(c.read_text())
           PY
 
       - name: Build Fabric Easy Magic
