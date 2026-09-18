@@ -325,3 +325,17 @@ for jf in java_root.rglob("*.java"):
         jf.write_text(new)
 
 print("Applied Fabric 26.x PayloadTypeRegistry directional renames.")
+
+
+# Fabric Screen Handler API was renamed to Menu API in 26.1+.
+for jf in java_root.rglob("*.java"):
+    txt = jf.read_text(errors="ignore")
+    new = txt.replace(
+        "net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory",
+        "net.fabricmc.fabric.api.menu.v1.ExtendedMenuProvider",
+    )
+    new = re.sub(r"\bExtendedScreenHandlerFactory\b", "ExtendedMenuProvider", new)
+    if new != txt:
+        jf.write_text(new)
+
+print("Applied ExtendedScreenHandlerFactory -> ExtendedMenuProvider migration.")
