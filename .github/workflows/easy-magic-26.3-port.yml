@@ -169,9 +169,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p easymagic-src/deps
-          jar="$(find puzzleslib-src/Fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' ! -name '*dev*' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
+          jar="$(find puzzleslib-src/Fabric/build/libs -maxdepth 1 -type f -name '*+Fabric.jar' | head -1)"
           if [ -z "$jar" ]; then
-            jar="$(find puzzleslib-src/Fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
+            jar="$(find puzzleslib-src/Fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' ! -name '*javadoc*' ! -name '*dev*' | head -1)"
           fi
           test -n "$jar"
           cp "$jar" easymagic-src/deps/puzzleslib-26.3.jar
