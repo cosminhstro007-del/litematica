@@ -75,9 +75,8 @@ jobs:
           p=Path("core-src/build.gradle")
           s=p.read_text()
           s=s.replace("id 'fabric-loom' version '1.10.+'", "id 'net.fabricmc.fabric-loom' version '1.17.+'")
-          # Remove the old Parchment mapping block, then add an explicit 26.3 Intermediary mapping
-          # dependency because this upstream project assumes Loom's mappings configuration is non-empty.
-          s=re.sub(r'\n\s*mappings\(loom\.layered \{.*?\n\s*\}\)\n', '\n    mappings "net.fabricmc:intermediary:${project.minecraft_version}:v2"\n', s, flags=re.S)
+          # Minecraft 26.x is unobfuscated; remove the obsolete Parchment/official mapping block.
+          s=re.sub(r'\n\s*mappings\(loom\.layered \{.*?\n\s*\}\)\n', '\n', s, flags=re.S)
           s=s.replace("it.options.release = 21", "it.options.release = 25")
           s=s.replace("sourceCompatibility = JavaVersion.VERSION_21", "sourceCompatibility = JavaVersion.VERSION_25")
           s=s.replace("targetCompatibility = JavaVersion.VERSION_21", "targetCompatibility = JavaVersion.VERSION_25")
