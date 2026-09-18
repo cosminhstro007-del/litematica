@@ -181,15 +181,24 @@ jobs:
         if: always()
         shell: bash
         run: |
-          jarfile="$(find sfl-src/.gradle ~/.gradle/caches -type f -name '*.jar' 2>/dev/null | grep -E 'minecraft.*26\\.3|26\\.3.*minecraft' | head -1 || true)"
+          jarfile=""
+          while IFS= read -r candidate; do
+            if jar tf "$candidate" 2>/dev/null | grep -q '^net/minecraft/client/Minecraft.class$'; then
+              jarfile="$candidate"
+              break
+            fi
+          done < <(find sfl-src/.gradle ~/.gradle -type f -name '*.jar' -size +5M 2>/dev/null | sort -u)
           echo "Minecraft jar: $jarfile"
           if [ -n "$jarfile" ]; then
             echo "=== block/model ==="
-            jar tf "$jarfile" | grep -E '^net/minecraft/client/(renderer/block/model|resources/model|renderer/item)/.*\\.class$' | head -1200 || true
+            jar tf "$jarfile" | grep -E '^net/minecraft/client/(renderer/block/model|resources/model|renderer/item)/.*[.]class$' | head -1200 || true
             echo "=== spawn ==="
-            jar tf "$jarfile" | grep -E '^net/minecraft/world/entity/.*(Spawn|spawn).*\\.class$' | head -300 || true
+            jar tf "$jarfile" | grep -E '^net/minecraft/world/entity/.*(Spawn|spawn).*[.]class$' | head -300 || true
             echo "=== loot condition ==="
-            jar tf "$jarfile" | grep -E '^net/minecraft/world/level/storage/loot/.*(Condition|Predicate|predicate).*\\.class$' | head -300 || true
+            jar tf "$jarfile" | grep -E '^net/minecraft/world/level/storage/loot/.*(Condition|Predicate|predicate).*[.]class$' | head -300 || true
+          else
+            echo 'Minecraft jar not found; large jar candidates:'
+            find sfl-src/.gradle ~/.gradle -type f -name '*.jar' -size +5M 2>/dev/null | head -200 || true
           fi
       - name: Build Sophisticated Fabric Lib 26.3
         working-directory: sfl-src
