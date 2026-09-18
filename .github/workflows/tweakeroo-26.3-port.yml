@@ -1,0 +1,127 @@
+name: Tweakeroo 26.3 Port
+
+on:
+  push:
+    branches:
+      - tweakeroo-26.3-port
+
+jobs:
+  build-and-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Litematica 26.3 test harness
+        uses: actions/checkout@v6
+
+      - name: Checkout Tweakeroo DEV/26.3
+        uses: actions/checkout@v6
+        with:
+          repository: sakura-ryoko/tweakeroo
+          ref: DEV/26.3
+          path: tweakeroo-src
+
+      - name: Setup Java 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Target Minecraft 26.3 final
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("tweakeroo-src/gradle.properties")
+          s = p.read_text()
+          s = s.replace("minecraft_version_out = 26.3-rc-1", "minecraft_version_out = 26.3")
+          s = s.replace("minecraft_version = 26.3-rc-1", "minecraft_version = 26.3")
+          s = s.replace("fabric_api_version = 0.160.3+26.3", "fabric_api_version = 0.160.6+26.3")
+          p.write_text(s)
+          print(p.read_text())
+          PY
+
+      - name: Build Tweakeroo
+        working-directory: tweakeroo-src
+        run: |
+          chmod +x ./gradlew
+          ./gradlew clean build --stacktrace
+          ls -lah build/libs
+
+      - name: Select remapped Tweakeroo jar
+        shell: bash
+        run: |
+          jar="$(find tweakeroo-src/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
+          test -n "$jar"
+          echo "Selected: $jar"
+          cp "$jar" Tweakeroo-26.3-Fabric-0.29.99-dev.jar
+          unzip -p Tweakeroo-26.3-Fabric-0.29.99-dev.jar fabric.mod.json | tee tweakeroo-fabric-mod.json
+          grep -q '"tweakeroo"' tweakeroo-fabric-mod.json
+          grep -q '26.3' tweakeroo-fabric-mod.json
+
+      - name: Prepare Litematica + Tweakeroo compatibility run
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+          ./gradlew classes --stacktrace
+          mkdir -p run/mods
+          cp Tweakeroo-26.3-Fabric-0.29.99-dev.jar run/mods/
+
+      - name: Runtime launch smoke test
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb mesa-utils libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers
+          Xvfb :99 -screen 0 1280x720x24 +extension GLX +render -noreset > xvfb.out 2>&1 &
+          xvfb_pid=$!
+          export DISPLAY=:99
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
+          sleep 2
+          glxinfo -B | tee glxinfo.out
+
+          set +e
+          timeout 120s ./gradlew runClient --stacktrace > runclient.out 2>&1
+          code=$?
+          set -e
+          kill "$xvfb_pid" 2>/dev/null || true
+
+          cat runclient.out
+          test -f run/logs/latest.log
+          tail -n 500 run/logs/latest.log
+
+          if [ "$code" -ne 124 ]; then
+            echo "Minecraft client exited before smoke-test timeout (exit $code)"
+            exit 1
+          fi
+
+          if grep -Eiq 'Mixin apply failed|Could not execute entrypoint|NoSuchMethodError|NoClassDefFoundError|ExceptionInInitializerError|VerifyError|ModResolutionException|Crash report saved' run/logs/latest.log; then
+            echo "Fatal mod/client startup error detected"
+            exit 1
+          fi
+
+          grep -Eiq 'Loading Minecraft 26\.3' run/logs/latest.log
+          grep -Eiq 'litematica 0\.28\.99-dev' run/logs/latest.log
+          grep -Eiq 'malilib 0\.29\.99-dev' run/logs/latest.log
+          grep -Eiq 'tweakeroo 0\.29\.99-dev' run/logs/latest.log
+
+      - name: Upload Tweakeroo jar
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: Tweakeroo-26.3-Fabric
+          path: |
+            Tweakeroo-26.3-Fabric-0.29.99-dev.jar
+            tweakeroo-fabric-mod.json
+
+      - name: Upload runtime logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: Tweakeroo-26.3-runtime-logs
+          path: |
+            run/logs/latest.log
+            runclient.out
+            glxinfo.out
+            xvfb.out
