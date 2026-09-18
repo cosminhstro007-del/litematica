@@ -175,7 +175,7 @@ if (providers.gradleProperty("iris_preview_test").isPresent()) {
     }
 
     dependencies {
-        modRuntimeOnly "maven.modrinth:AANobbMI:bAZQdGpg" // Sodium 0.9.2 Fabric 26.3
-        modRuntimeOnly "maven.modrinth:YL57xq9U:bAdKrpw8" // Iris 1.11.6 Fabric 26.3
+        modImplementation "maven.modrinth:AANobbMI:bAZQdGpg" // Sodium 0.9.2 Fabric 26.3
+        modImplementation "maven.modrinth:YL57xq9U:bAdKrpw8" // Iris 1.11.6 Fabric 26.3
     }
 }
