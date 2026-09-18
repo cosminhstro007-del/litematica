@@ -24,7 +24,7 @@ jobs:
           chmod +x ./gradlew
           mkdir -p proof serverrun clientrun
           printf 'eula=true\n' > serverrun/eula.txt
-          printf 'online-mode=false\nserver-port=25565\nmax-players=4\n' > serverrun/server.properties
+          printf 'online-mode=false\nwhite-list=false\nenforce-whitelist=false\nserver-port=25565\nmax-players=4\n' > serverrun/server.properties
 
           cat >> build.gradle <<'EOF'
           loom {
