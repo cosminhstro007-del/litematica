@@ -52,6 +52,18 @@ jobs:
           cp "$jar" PuzzlesLib-26.3-Fabric-26.3.0.jar
           jar uf PuzzlesLib-26.3-Fabric-26.3.0.jar -C puzzleslib-src/Common/src/main/resources puzzleslib.classtweaker
           unzip -l PuzzlesLib-26.3-Fabric-26.3.0.jar | grep -q 'puzzleslib.classtweaker'
+
+          # 26.3 mixin config generator has one capitalization mismatch:
+          # config says EnderManFabricMixin, source/class is EndermanFabricMixin.
+          rm -rf /tmp/puzzles-mixin-patch
+          mkdir -p /tmp/puzzles-mixin-patch
+          unzip -p PuzzlesLib-26.3-Fabric-26.3.0.jar puzzleslib.fabric.mixins.json > /tmp/puzzles-mixin-patch/puzzleslib.fabric.mixins.json
+          sed -i 's/EnderManFabricMixin/EndermanFabricMixin/g' /tmp/puzzles-mixin-patch/puzzleslib.fabric.mixins.json
+          zip -q -d PuzzlesLib-26.3-Fabric-26.3.0.jar puzzleslib.fabric.mixins.json
+          (cd /tmp/puzzles-mixin-patch && zip -q "$GITHUB_WORKSPACE/PuzzlesLib-26.3-Fabric-26.3.0.jar" puzzleslib.fabric.mixins.json)
+          unzip -p PuzzlesLib-26.3-Fabric-26.3.0.jar puzzleslib.fabric.mixins.json | grep -q 'EndermanFabricMixin'
+          ! unzip -p PuzzlesLib-26.3-Fabric-26.3.0.jar puzzleslib.fabric.mixins.json | grep -q 'EnderManFabricMixin'
+
           cp PuzzlesLib-26.3-Fabric-26.3.0.jar easymagic-src/deps/puzzleslib-26.3.jar
           unzip -p PuzzlesLib-26.3-Fabric-26.3.0.jar fabric.mod.json | tee puzzleslib-fabric-mod.json
           grep -q '"puzzleslib"' puzzleslib-fabric-mod.json
