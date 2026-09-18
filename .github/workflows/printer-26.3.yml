@@ -80,6 +80,99 @@ jobs:
           s = s.replace('"malilib": "<0.29.0-"', '"malilib": "<0.29.99-"')
           s = s.replace('"litematica": "<0.28.0-"', '"litematica": "<0.28.99-"')
           p.write_text(s)
+
+          # Minecraft 26.3 API source changes.
+          for java_file in [
+              Path("src/main/java/me/aleksilassila/litematica/printer/BlockHelper.java"),
+              Path("src/main/java/me/aleksilassila/litematica/printer/guides/Guides.java"),
+              Path("src/main/java/me/aleksilassila/litematica/printer/guides/placement/PropertySpecificGuesserGuide.java"),
+          ]:
+              t = java_file.read_text()
+              t = t.replace("RedStoneWireBlock", "RedstoneWireBlock")
+              java_file.write_text(t)
+
+          p = Path("src/main/java/me/aleksilassila/litematica/printer/guides/placement/PlacementGuide.java")
+          t = p.read_text()
+          t = t.replace("return blockState.blocksMotion();",
+                        "return !blockState.getCollisionShape(state.world, state.blockPos).isEmpty();")
+          p.write_text(t)
+
+          p = Path("src/main/java/me/aleksilassila/litematica/printer/implementation/mixin/MixinClientPlayerEntity.java")
+          t = p.read_text()
+          t = t.replace("import java.util.Optional;", "import java.util.Optional;\\nimport java.util.Arrays;\\nimport java.util.List;")
+          t = t.replace("import net.minecraft.world.level.block.entity.SignBlockEntity;",
+                        "import net.minecraft.world.level.block.entity.SignBlockEntity;\\nimport net.minecraft.world.level.block.entity.SignTextSlot;")
+          old = '''    public void openEditSignScreen(SignBlockEntity sign, boolean front, CallbackInfo ci) {
+        getTargetSignEntity(sign).ifPresent(signBlockEntity ->
+        {
+            ServerboundSignUpdatePacket packet = new ServerboundSignUpdatePacket(sign.getBlockPos(),
+                    front,
+                    signBlockEntity.getText(front).getMessage(0, false).getString(),
+                    signBlockEntity.getText(front).getMessage(1, false).getString(),
+                    signBlockEntity.getText(front).getMessage(2, false).getString(),
+                    signBlockEntity.getText(front).getMessage(3, false).getString());
+            this.connection.send(packet);
+            ci.cancel();
+        });
+    }'''
+          new = '''    public void openEditSignScreen(SignBlockEntity sign, SignTextSlot slot, CallbackInfo ci) {
+        getTargetSignEntity(sign).ifPresent(signBlockEntity ->
+        {
+            List<String> lines = Arrays.stream(signBlockEntity.getText(slot).getMessages(false))
+                    .map(message -> message.getString())
+                    .toList();
+            ServerboundSignUpdatePacket packet = new ServerboundSignUpdatePacket(sign.getBlockPos(), lines, slot);
+            this.connection.send(packet);
+            ci.cancel();
+        });
+    }'''
+          if old not in t:
+              raise SystemExit("Expected 26.2 sign edit method not found")
+          p.write_text(t.replace(old, new))
+
+          # AxeItem was removed in 26.3. Keep classic vanilla log stripping via the same block mapping.
+          p = Path("src/main/java/me/aleksilassila/litematica/printer/guides/interaction/LogStrippingGuide.java")
+          t = p.read_text()
+          t = t.replace("import me.aleksilassila.litematica.printer.mixin.AxeItemAccessor;\\n", "")
+          t = t.replace("import net.minecraft.world.level.block.Block;",
+
+                        "import net.minecraft.world.level.block.Block;\\nimport net.minecraft.world.level.block.Blocks;")
+          old = "    public static final Map<Block, Block> STRIPPED_BLOCKS = AxeItemAccessor.getStrippedBlocks();"
+          new = '''    public static final Map<Block, Block> STRIPPED_BLOCKS = Map.ofEntries(
+            Map.entry(Blocks.OAK_LOG, Blocks.STRIPPED_OAK_LOG),
+            Map.entry(Blocks.OAK_WOOD, Blocks.STRIPPED_OAK_WOOD),
+            Map.entry(Blocks.SPRUCE_LOG, Blocks.STRIPPED_SPRUCE_LOG),
+            Map.entry(Blocks.SPRUCE_WOOD, Blocks.STRIPPED_SPRUCE_WOOD),
+            Map.entry(Blocks.BIRCH_LOG, Blocks.STRIPPED_BIRCH_LOG),
+            Map.entry(Blocks.BIRCH_WOOD, Blocks.STRIPPED_BIRCH_WOOD),
+            Map.entry(Blocks.JUNGLE_LOG, Blocks.STRIPPED_JUNGLE_LOG),
+            Map.entry(Blocks.JUNGLE_WOOD, Blocks.STRIPPED_JUNGLE_WOOD),
+            Map.entry(Blocks.ACACIA_LOG, Blocks.STRIPPED_ACACIA_LOG),
+            Map.entry(Blocks.ACACIA_WOOD, Blocks.STRIPPED_ACACIA_WOOD),
+            Map.entry(Blocks.DARK_OAK_LOG, Blocks.STRIPPED_DARK_OAK_LOG),
+            Map.entry(Blocks.DARK_OAK_WOOD, Blocks.STRIPPED_DARK_OAK_WOOD),
+            Map.entry(Blocks.MANGROVE_LOG, Blocks.STRIPPED_MANGROVE_LOG),
+            Map.entry(Blocks.MANGROVE_WOOD, Blocks.STRIPPED_MANGROVE_WOOD),
+            Map.entry(Blocks.CHERRY_LOG, Blocks.STRIPPED_CHERRY_LOG),
+            Map.entry(Blocks.CHERRY_WOOD, Blocks.STRIPPED_CHERRY_WOOD),
+            Map.entry(Blocks.PALE_OAK_LOG, Blocks.STRIPPED_PALE_OAK_LOG),
+            Map.entry(Blocks.PALE_OAK_WOOD, Blocks.STRIPPED_PALE_OAK_WOOD),
+            Map.entry(Blocks.BAMBOO_BLOCK, Blocks.STRIPPED_BAMBOO_BLOCK),
+            Map.entry(Blocks.CRIMSON_STEM, Blocks.STRIPPED_CRIMSON_STEM),
+            Map.entry(Blocks.CRIMSON_HYPHAE, Blocks.STRIPPED_CRIMSON_HYPHAE),
+            Map.entry(Blocks.WARPED_STEM, Blocks.STRIPPED_WARPED_STEM),
+            Map.entry(Blocks.WARPED_HYPHAE, Blocks.STRIPPED_WARPED_HYPHAE)
+    );'''
+          if old not in t:
+              raise SystemExit("Expected AxeItem stripping map not found")
+          p.write_text(t.replace(old, new))
+
+          p = Path("src/main/resources/litematica-printer.mixins.json")
+          t = p.read_text().replace('    "AxeItemAccessor",\\n', '')
+          p.write_text(t)
+          axe_accessor = Path("src/main/java/me/aleksilassila/litematica/printer/mixin/AxeItemAccessor.java")
+          if axe_accessor.exists():
+              axe_accessor.unlink()
           PY
 
       - name: Build Printer 26.3
