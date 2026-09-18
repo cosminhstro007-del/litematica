@@ -1,0 +1,135 @@
+name: Easy Magic 26.3 Port
+
+on:
+  push:
+    branches:
+      - easy-magic-26.3-port
+
+jobs:
+  build-and-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout test harness
+        uses: actions/checkout@v6
+
+      - name: Checkout Easy Magic 26.2 source
+        uses: actions/checkout@v6
+        with:
+          repository: Fuzss/easy-magic
+          ref: 26.2.x
+          path: easymagic-src
+
+      - name: Setup Java 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Port project metadata to Minecraft 26.3
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+
+          p = Path("easymagic-src/gradle.properties")
+          s = p.read_text()
+          s = s.replace("project.libs=26.2-SNAPSHOT", "project.libs=26.3-SNAPSHOT")
+          s = s.replace("mod.version=26.2.0", "mod.version=26.3.0")
+          p.write_text(s)
+
+          m = Path("easymagic-src/metadata.json")
+          data = json.loads(m.read_text())
+          data["minecraft"] = "26.3"
+          data["mod"]["version"] = "26.3.0"
+          m.write_text(json.dumps(data, indent=4) + "\n")
+
+          print(p.read_text())
+          print(m.read_text())
+          PY
+
+      - name: Build Fabric Easy Magic
+        working-directory: easymagic-src
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :Fabric:clean :Fabric:build --stacktrace
+          find Fabric/build/libs -maxdepth 1 -type f -ls || true
+
+      - name: Select Fabric jar
+        shell: bash
+        run: |
+          jar="$(find easymagic-src/Fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' ! -name '*dev*' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
+          if [ -z "$jar" ]; then
+            jar="$(find easymagic-src/Fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
+          fi
+          test -n "$jar"
+          echo "Selected: $jar"
+          cp "$jar" EasyMagic-26.3-Fabric-26.3.0.jar
+          unzip -p EasyMagic-26.3-Fabric-26.3.0.jar fabric.mod.json | tee easymagic-fabric-mod.json
+          grep -q '"easymagic"' easymagic-fabric-mod.json
+          grep -q '26.3' easymagic-fabric-mod.json
+
+      - name: Runtime launch smoke test
+        working-directory: easymagic-src
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb mesa-utils libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers
+          Xvfb :99 -screen 0 1280x720x24 +extension GLX +render -noreset > ../xvfb.out 2>&1 &
+          xvfb_pid=$!
+          export DISPLAY=:99
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
+          sleep 2
+
+          set +e
+          timeout 120s ./gradlew :Fabric:runClient --stacktrace > ../runclient.out 2>&1
+          code=$?
+          set -e
+          kill "$xvfb_pid" 2>/dev/null || true
+
+          cat ../runclient.out
+          log="$(find Fabric/run -path '*/logs/latest.log' -type f | head -1)"
+          if [ -z "$log" ]; then
+            log="$(find . -path '*/logs/latest.log' -type f | head -1)"
+          fi
+          test -n "$log"
+          cp "$log" ../latest.log
+          tail -n 600 ../latest.log
+
+          if [ "$code" -ne 124 ]; then
+            echo "Minecraft client exited before smoke-test timeout (exit $code)"
+            exit 1
+          fi
+
+          if grep -Eiq 'Mixin apply failed|Could not execute entrypoint|NoSuchMethodError|NoClassDefFoundError|ExceptionInInitializerError|VerifyError|ModResolutionException|Crash report saved|Caused by: java.lang.(NoSuch|AbstractMethod)' ../latest.log; then
+            echo "Fatal mod/client startup error detected"
+            exit 1
+          fi
+
+          grep -Eiq 'Minecraft 26\.3|Loading Minecraft 26\.3' ../latest.log
+          grep -Eiq 'easy magic|easymagic' ../latest.log
+          grep -Eiq 'puzzles lib|puzzleslib' ../latest.log
+          grep -Eiq 'forge config api port|forgeconfigapiport' ../latest.log
+
+      - name: Upload Easy Magic jar
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: EasyMagic-26.3-Fabric
+          path: |
+            EasyMagic-26.3-Fabric-26.3.0.jar
+            easymagic-fabric-mod.json
+
+      - name: Upload runtime logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: EasyMagic-26.3-runtime-logs
+          path: |
+            latest.log
+            runclient.out
+            xvfb.out
