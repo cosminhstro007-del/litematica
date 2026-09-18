@@ -1,0 +1,111 @@
+name: multiplayer-ingame-litematica-test
+on:
+  push:
+    branches: [ "DEV/26.3" ]
+
+jobs:
+  multiplayer-ingame:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Prepare test config
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb mesa-utils libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers openbox
+          chmod +x ./gradlew
+          mkdir -p proof serverrun clientrun
+          printf 'eula=true\n' > serverrun/eula.txt
+          printf 'online-mode=false\nserver-port=25565\nmax-players=4\n' > serverrun/server.properties
+
+          cat >> build.gradle <<'EOF'
+          loom {
+              runs {
+                  server {
+                      runDirectory = file("serverrun")
+                  }
+                  client {
+                      runDirectory = file("clientrun")
+                      programArguments.add("--quickPlayMultiplayer")
+                      programArguments.add("localhost:25565")
+                      programArguments.add("--quickPlayPath")
+                      programArguments.add("quickplay.json")
+                      systemProperties.put("litematica.ci.ingame", "true")
+                  }
+              }
+          }
+          EOF
+
+      - name: Add temporary Litematica in-game verifier
+        shell: bash
+        run: |
+          python3 -c 'from pathlib import Path; p=Path("src/main/java/fi/dy/masa/litematica/scheduler/ClientTickHandler.java"); L=p.read_text().splitlines(); c=next(i for i,x in enumerate(L) if x.startswith("public class ClientTickHandler")); L[c+2:c+2]=["    private static boolean ciMenuRequested;","    private static boolean ciMenuVerified;"]; i=next(i for i,x in enumerate(L) if "if (mc.level != null && mc.player != null)" in x); j=i+2; L[j:j]=["            if (Boolean.getBoolean(\"litematica.ci.ingame\"))","            {","                if (ciMenuRequested == false)","                {","                    fi.dy.masa.malilib.gui.GuiBase.openGui(new fi.dy.masa.litematica.gui.GuiMainMenu());","                    ciMenuRequested = true;","                    fi.dy.masa.litematica.Litematica.LOGGER.info(\"[CI-INGAME] Requested Litematica main menu while connected to test world\");","                }","                else if (ciMenuVerified == false && mc.gui.screen() instanceof fi.dy.masa.litematica.gui.GuiMainMenu)","                {","                    ciMenuVerified = true;","                    fi.dy.masa.litematica.Litematica.LOGGER.info(\"[CI-INGAME] VERIFIED Litematica GuiMainMenu open while connected to test world\");","                }","            }"]; p.write_text(chr(10).join(L)+chr(10))'
+
+      - name: Start Minecraft 26.3 server
+        shell: bash
+        run: |
+          ./gradlew runServer > proof/server.out 2>&1 &
+          echo $! > proof/server.pid
+          ok=0
+          for i in $(seq 1 100); do
+            if grep -q "Done (" proof/server.out 2>/dev/null; then
+              ok=1
+              break
+            fi
+            sleep 1
+          done
+          tail -n 120 proof/server.out || true
+          if [ "$ok" -ne 1 ]; then
+            echo "Server failed to become ready"
+            exit 2
+          fi
+
+      - name: Launch client and verify Litematica in world
+        shell: bash
+        run: |
+          Xvfb :99 -screen 0 1280x720x24 +extension GLX +render -noreset > proof/xvfb.out 2>&1 &
+          xvfb_pid=$!
+          export DISPLAY=:99
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
+          openbox --sm-disable > proof/openbox.out 2>&1 &
+          openbox_pid=$!
+          sleep 2
+
+          set +e
+          timeout 100s ./gradlew runClient --info > proof/client.out 2>&1
+          code=$?
+          set -e
+
+          cp clientrun/logs/latest.log proof/latest.log 2>/dev/null || true
+          cp clientrun/quickplay.json proof/quickplay.json 2>/dev/null || true
+          tail -n 500 proof/latest.log || true
+
+          kill "$openbox_pid" "$xvfb_pid" 2>/dev/null || true
+          kill "$(cat proof/server.pid)" 2>/dev/null || true
+
+          if [ "$code" -ne 124 ]; then
+            echo "Client exited before timeout with code $code"
+            exit 1
+          fi
+
+          grep -Fq "[CI-INGAME] VERIFIED Litematica GuiMainMenu open while connected to test world" proof/latest.log
+          grep -Eiq "litematica 0\.28\.99-dev" proof/latest.log
+          grep -Eiq "Placement Manager calculated thread limit" proof/latest.log
+          grep -Eiq "BlockModelCacheSchematic: refreshing model cache" proof/latest.log
+          test -f proof/quickplay.json
+
+      - name: Upload proof
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: multiplayer-ingame-proof
+          path: proof/
