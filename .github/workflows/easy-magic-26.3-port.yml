@@ -87,7 +87,7 @@ jobs:
           s = c.read_text()
           s = s.replace(
               "modCompileOnlyApi(sharedLibs.puzzleslib.common)",
-              'modCompileOnlyApi(files("../deps/puzzleslib-26.3.jar"))'
+              'compileOnly(files("../deps/puzzleslib-26.3.jar"))'
           )
           c.write_text(s)
 
