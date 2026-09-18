@@ -177,6 +177,18 @@ jobs:
           axe_accessor = Path("src/main/java/me/aleksilassila/litematica/printer/mixin/AxeItemAccessor.java")
           if axe_accessor.exists():
               axe_accessor.unlink()
+
+          # 26.3 server-safety fix: rotation spoofing must not resend XYZ.
+          # A rotation-only packet is sufficient and avoids invalid-movement kicks.
+          p = Path("src/main/java/me/aleksilassila/litematica/printer/actions/PrepareAction.java")
+          t = p.read_text()
+          old = """                ServerboundMovePlayerPacket packet = new ServerboundMovePlayerPacket.PosRot(player.getX(), player.getY(), player.getZ(), yaw,
+                        pitch, player.onGround(), player.horizontalCollision);"""
+          new = """                ServerboundMovePlayerPacket packet = new ServerboundMovePlayerPacket.Rot(
+                        yaw, pitch, player.onGround(), player.horizontalCollision);"""
+          if old not in t:
+              raise SystemExit("Expected printer PosRot packet code not found")
+          p.write_text(t.replace(old, new))
           
           PY
 
