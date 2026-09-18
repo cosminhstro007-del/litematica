@@ -35,34 +35,110 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      - name: Download cached Puzzles Lib 26.3 build
-        uses: actions/download-artifact@v6
-        with:
-          name: EasyMagic-26.3-Fabric
-          path: cached-puzzles
-          github-token: ${{ github.token }}
-          run-id: 35335403936
+      - name: Patch current Puzzles Lib 26.3 Block mixin
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
 
-      - name: Prepare cached Puzzles Lib dependency
+          p = Path("puzzleslib-src/Fabric/src/main/java/fuzs/puzzleslib/fabric/mixin/BlockFabricMixin.java")
+          s = p.read_text()
+          s = s.replace(
+              "public void playerDestroy$0(Level level, Player player, BlockPos pos, BlockState state, @Nullable BlockEntity blockEntity, ItemStack destroyedWith, CallbackInfo callback) {\n"
+              "        if (level instanceof ServerLevel) {\n"
+              "            this.puzzleslib$capturedExperience = new int[1];\n"
+              "        }\n"
+              "    }",
+              "public void playerDestroy$0(ServerLevel level, ServerPlayer player, BlockPos pos, BlockState state, @Nullable BlockEntity blockEntity, ItemStack destroyedWith, CallbackInfo callback) {\n"
+              "        this.puzzleslib$capturedExperience = new int[1];\n"
+              "    }"
+          )
+          s = s.replace(
+              "public void playerDestroy$1(Level level, Player player, BlockPos pos, BlockState state, @Nullable BlockEntity blockEntity, ItemStack destroyedWith, CallbackInfo callback) {\n"
+              "        if (!(level instanceof ServerLevel serverLevel)) return;\n"
+              "        if (!(player instanceof ServerPlayer serverPlayer)) return;",
+              "public void playerDestroy$1(ServerLevel serverLevel, ServerPlayer serverPlayer, BlockPos pos, BlockState state, @Nullable BlockEntity blockEntity, ItemStack destroyedWith, CallbackInfo callback) {"
+          )
+          s = s.replace("import net.minecraft.world.entity.player.Player;\n", "")
+          s = s.replace("import net.minecraft.world.level.Level;\n", "")
+          p.write_text(s)
+          print(p.read_text())
+          PY
+
+      - name: Build latest Puzzles Lib 26.3 Fabric
+        working-directory: puzzleslib-src
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :Fabric:clean :Fabric:build --stacktrace
+          find Fabric/build/libs -maxdepth 1 -type f -ls
+
+      - name: Prepare latest Puzzles Lib dependency
         shell: bash
         run: |
           mkdir -p easymagic-src/deps
-          jar="$(find cached-puzzles -type f -name 'PuzzlesLib-26.3-Fabric-26.3.0.jar' | head -1)"
+          jar="$(find puzzleslib-src/Fabric/build/libs -maxdepth 1 -type f -name '*+Fabric.jar' | head -1)"
+          if [ -z "$jar" ]; then
+            jar="$(find puzzleslib-src/Fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' ! -name '*javadoc*' ! -name '*dev*' | head -1)"
+          fi
           test -n "$jar"
           cp "$jar" PuzzlesLib-26.3-Fabric-26.3.0.jar
-          jar uf PuzzlesLib-26.3-Fabric-26.3.0.jar -C puzzleslib-src/Common/src/main/resources puzzleslib.classtweaker
+
+          # Some unpublished 26.3 builds declare this resource without packaging it.
+          if ! unzip -l PuzzlesLib-26.3-Fabric-26.3.0.jar | grep -q 'puzzleslib.classtweaker'; then
+            jar uf PuzzlesLib-26.3-Fabric-26.3.0.jar -C puzzleslib-src/Common/src/main/resources puzzleslib.classtweaker
+          fi
           unzip -l PuzzlesLib-26.3-Fabric-26.3.0.jar | grep -q 'puzzleslib.classtweaker'
 
-          # 26.3 mixin config generator has one capitalization mismatch:
-          # config says EnderManFabricMixin, source/class is EndermanFabricMixin.
-          rm -rf /tmp/puzzles-mixin-patch
-          mkdir -p /tmp/puzzles-mixin-patch
-          unzip -p PuzzlesLib-26.3-Fabric-26.3.0.jar puzzleslib.fabric.mixins.json > /tmp/puzzles-mixin-patch/puzzleslib.fabric.mixins.json
-          sed -i 's/EnderManFabricMixin/EndermanFabricMixin/g' /tmp/puzzles-mixin-patch/puzzleslib.fabric.mixins.json
-          zip -q -d PuzzlesLib-26.3-Fabric-26.3.0.jar puzzleslib.fabric.mixins.json
-          (cd /tmp/puzzles-mixin-patch && zip -q "$GITHUB_WORKSPACE/PuzzlesLib-26.3-Fabric-26.3.0.jar" puzzleslib.fabric.mixins.json)
-          unzip -p PuzzlesLib-26.3-Fabric-26.3.0.jar puzzleslib.fabric.mixins.json | grep -q 'EndermanFabricMixin'
-          ! unzip -p PuzzlesLib-26.3-Fabric-26.3.0.jar puzzleslib.fabric.mixins.json | grep -q 'EnderManFabricMixin'
+          # Verify every configured Fabric mixin class exists in the jar; fix the known capitalization
+          # mismatch only if the generator still emits it.
+          python3 - <<'PY'
+          import json, zipfile, shutil, tempfile
+          from pathlib import Path
+
+          jar = Path("PuzzlesLib-26.3-Fabric-26.3.0.jar")
+          with zipfile.ZipFile(jar, "r") as z:
+              names = set(z.namelist())
+              cfg = json.loads(z.read("puzzleslib.fabric.mixins.json"))
+              package = cfg.get("package", "")
+              declared = []
+              for key in ("mixins", "client", "server"):
+                  declared.extend(cfg.get(key, []))
+              missing = []
+              for mixin in declared:
+                  full = (package + "." + mixin).replace(".", "/") + ".class"
+                  if full not in names:
+                      missing.append(mixin)
+              print("Missing configured mixins before patch:", missing)
+
+          if missing == ["EnderManFabricMixin"]:
+              with zipfile.ZipFile(jar, "r") as zin:
+                  cfg = json.loads(zin.read("puzzleslib.fabric.mixins.json"))
+                  for key in ("mixins", "client", "server"):
+                      cfg[key] = ["EndermanFabricMixin" if x == "EnderManFabricMixin" else x for x in cfg.get(key, [])]
+                  tmp = jar.with_suffix(".tmp.jar")
+                  with zipfile.ZipFile(tmp, "w") as zout:
+                      for item in zin.infolist():
+                          if item.filename == "puzzleslib.fabric.mixins.json":
+                              continue
+                          zout.writestr(item, zin.read(item.filename))
+                      zout.writestr("puzzleslib.fabric.mixins.json", json.dumps(cfg, indent=2))
+              tmp.replace(jar)
+
+          with zipfile.ZipFile(jar, "r") as z:
+              names = set(z.namelist())
+              cfg = json.loads(z.read("puzzleslib.fabric.mixins.json"))
+              package = cfg.get("package", "")
+              declared = []
+              for key in ("mixins", "client", "server"):
+                  declared.extend(cfg.get(key, []))
+              missing = [
+                  m for m in declared
+                  if (package + "." + m).replace(".", "/") + ".class" not in names
+              ]
+              print("Missing configured mixins after patch:", missing)
+              if missing:
+                  raise SystemExit("Configured Puzzles mixins missing from jar: " + repr(missing))
+          PY
 
           cp PuzzlesLib-26.3-Fabric-26.3.0.jar easymagic-src/deps/puzzleslib-26.3.jar
           unzip -p PuzzlesLib-26.3-Fabric-26.3.0.jar fabric.mod.json | tee puzzleslib-fabric-mod.json
