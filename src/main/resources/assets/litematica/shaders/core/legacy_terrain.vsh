@@ -5,6 +5,7 @@
 #include <minecraft:dynamictransforms.glsl>
 #include <minecraft:projection.glsl>
 #include <minecraft:sample_lightmap.glsl>
+#include <litematica:legacy_terrain_fix.glsl>
 
 layout(location = 0) in vec3 Position;
 layout(location = 1) in vec4 Color;
@@ -35,8 +36,8 @@ void main() {
     #endif
     texCoord0 = UV0;
 
-// Schematic chunks are already explicitly culled by Litematica.
-    // Do not use the vanilla distance/fog visibility factor here: on 26.3 that
-    // factor is supplied by TerrainUniform, while this renderer uses DynamicTransforms.
-    chunkVisibility = 1.0;
+//    const float chunkFullyVisibleRange = 16.0;
+//    float dist = length(pos);
+//    chunkVisibility = mix(1.0, ChunkVisibility, clamp((dist - chunkFullyVisibleRange) / chunkFullyVisibleRange, 0.0, 1.0));
+    chunkVisibility = ChunkVisibility;
 }

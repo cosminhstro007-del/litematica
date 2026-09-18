@@ -4,7 +4,7 @@ import java.util.List;
 import org.joml.Matrix4fc;
 import org.jspecify.annotations.Nullable;
 
-import com.mojang.renderpearl.api.commands.RenderPass;
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.renderpearl.api.buffers.GpuBuffer;
@@ -102,7 +102,7 @@ public interface IWorldSchematicRenderer
 
 	boolean renderFluid(FluidModelRendererSchematic renderer, BlockAndTintGetter world, BlockState blockState, FluidState fluidState, BlockPos pos, FluidRenderer.Output output, final float offsetY);
 
-	void drawBlockLayerGroup(RenderPass pass, ChunkSectionLayerGroup group);
+	void drawBlockLayerGroup(RenderTarget fb, ChunkSectionLayerGroup group);
 
 	void scheduleTranslucentSorting(Vec3 cameraPos, ProfilerFiller profiler);
 

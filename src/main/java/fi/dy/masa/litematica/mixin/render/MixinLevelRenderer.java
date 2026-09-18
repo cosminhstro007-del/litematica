@@ -7,7 +7,6 @@ import org.joml.Vector4f;
 import com.mojang.blaze3d.resource.GraphicsResourceAllocator;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
-import com.mojang.renderpearl.api.commands.RenderPass;
 import net.minecraft.client.renderer.*;
 import net.minecraft.client.renderer.chunk.ChunkSectionLayerGroup;
 import net.minecraft.client.renderer.chunk.ChunkSectionsToRender;
@@ -92,29 +91,23 @@ public abstract class MixinLevelRenderer
 		}
 	}
 
-	@Inject(method = "executeSolid", at = @At("TAIL"))
-	private void litematica_renderSchematicOpaque(ChunkSectionsToRender chunkSectionsToRender,
-	                                               FeatureRenderDispatcher.PreparedFrame featureFrame,
-	                                               RenderPass renderPass, CallbackInfo ci)
+	@Inject(method = "executeOit", at = @At("HEAD"))
+	private void litematica_renderMainSection_Oit(ChunkSectionsToRender chunkSectionsToRender, FeatureRenderDispatcher.PreparedFrame featureFrame, CallbackInfo ci)
 	{
-		this.litematica$prepareProfiler();
-		LitematicaRenderer.getInstance().piecewiseDrawBlockLayerGroup(renderPass, ChunkSectionLayerGroup.OPAQUE);
-
 		if (this.useOIT())
 		{
-			LitematicaRenderer.getInstance().piecewiseDrawBlockLayerGroup(renderPass, ChunkSectionLayerGroup.TRANSLUCENT);
+			LitematicaRenderer.getInstance().piecewiseDrawBlockLayerGroup(this.targets.main.get(), ChunkSectionLayerGroup.OPAQUE);
+			LitematicaRenderer.getInstance().piecewiseDrawBlockLayerGroup(this.targets.main.get(), ChunkSectionLayerGroup.TRANSLUCENT);
 		}
 	}
 
-	@Inject(method = "executeClassicTransparency", at = @At("TAIL"))
-	private void litematica_renderSchematicTranslucent(ChunkSectionsToRender chunkSectionsToRender,
-	                                                    FeatureRenderDispatcher.PreparedFrame featureFrame,
-	                                                    RenderPass renderPass, CallbackInfo ci)
+	@Inject(method = "executeOutline", at = @At("HEAD"))
+	private void litematica_renderMainSection_Outline1(FeatureRenderDispatcher.PreparedFrame featureFrame, CallbackInfo ci)
 	{
 		if (!this.useOIT())
 		{
-			this.litematica$prepareProfiler();
-			LitematicaRenderer.getInstance().piecewiseDrawBlockLayerGroup(renderPass, ChunkSectionLayerGroup.TRANSLUCENT);
+			LitematicaRenderer.getInstance().piecewiseDrawBlockLayerGroup(this.targets.main.get(), ChunkSectionLayerGroup.OPAQUE);
+			LitematicaRenderer.getInstance().piecewiseDrawBlockLayerGroup(this.targets.main.get(), ChunkSectionLayerGroup.TRANSLUCENT);
 		}
 	}
 

@@ -782,6 +782,7 @@ public class WorldRendererSchematic implements IWorldSchematicRenderer
         if (startedDrawing)
         {
             profiler.popPush("fill_uniforms");      // , (int) cameraX, (int) cameraY, (int) cameraZ
+            this.getSchematicRenderState().legacyTerrainFix.updateBuffer(atlasWidth, atlasHeight, 1.0f);
             GpuBufferSlice[] transformSlices = RenderSystem.getDynamicUniforms()
                                                            .writeTransforms(
                                                                    transformValues.toArray(new DynamicGpuData.Transform[0])
@@ -790,7 +791,8 @@ public class WorldRendererSchematic implements IWorldSchematicRenderer
             profiler.popPush("fill_batch_draw");
             this.getSchematicRenderState().batchDraw = new ChunkRenderBatchDraw(blockAtlas, renderMap,
                                                       renderCollidingBlocks, renderAsTranslucent, indexCount,
-                                                      transformSlices
+                                                      transformSlices,
+                                                      this.getSchematicRenderState().legacyTerrainFix.getCurrentBufferSlice()
             );
             this.shouldDraw = true;
         }
@@ -801,7 +803,7 @@ public class WorldRendererSchematic implements IWorldSchematicRenderer
     }
 
     @Override
-    public void drawBlockLayerGroup(RenderPass pass, ChunkSectionLayerGroup group)
+    public void drawBlockLayerGroup(RenderTarget fb, ChunkSectionLayerGroup group)
     {
 //        LOGGER.warn("[WorldRenderer] drawBlockLayerGroup() [{}]", group.label());
         if (this.getSchematicRenderState().hasBatchDraw() && this.shouldDraw)
@@ -821,14 +823,8 @@ public class WorldRendererSchematic implements IWorldSchematicRenderer
 
 //            this.dumpSampler(sampler);
 
-            try
-            {
-                this.getSchematicRenderState().getBatchDraw().draw(pass, group, sampler, this.profiler);
-            }
-            finally
-            {
-                RenderSystem.setShaderFog(this.vanillaFogBuffer);
-            }
+            this.getSchematicRenderState().getBatchDraw().draw(fb, group, sampler, this.profiler);
+            RenderSystem.setShaderFog(this.vanillaFogBuffer);
 
             this.profiler.pop();
         }

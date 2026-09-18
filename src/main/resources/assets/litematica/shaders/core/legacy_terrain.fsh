@@ -5,6 +5,7 @@
 #include <minecraft:dynamictransforms.glsl>
 #include <minecraft:oit.glsl>
 #include <minecraft:texture_sampling.glsl>
+#include <litematica:legacy_terrain_fix.glsl>
 
 uniform sampler2D Sampler0;
 
@@ -29,18 +30,21 @@ vec4 calculateFinalColor(vec4 color) {
 }
 
 void main() {
-    // Use the block atlas UV directly. The old 26.3 port duplicated vanilla's
-    // TerrainUniform in LegacyTerrainFix; if that UBO was not populated exactly
-    // like vanilla then ChunkVisibility/TextureSize became invalid and the entire
-    // schematic was mixed to FogColor (the blue preview bug).
-    vec4 color = texture(Sampler0, texCoord0) * vertexColor * ColorModulator;
-
+    vec4 color = vec4(1, 1, 1, 1);
+//    vec4 color = sampleNearest(Sampler0, texCoord0, 1.0f / TextureSize) * vertexColor * ColorModulator;
+    if (hasShadersOn == 1) {
+        color = sampleNearest(Sampler0, texCoord0, 1.0f / TextureSize) * vertexColor * ColorModulator;
+    } else {
+        color = (UseRgss == 1 ? sampleRGSS(Sampler0, texCoord0, 1.0f / TextureSize) : sampleNearest(Sampler0, texCoord0, 1.0f / TextureSize)) * vertexColor * ColorModulator;
+        #ifndef OIT_ALPHA_ONLY
+        color = mix(FogColor * vec4(1, 1, 1, color.a), color, chunkVisibility);
+        #endif
+    }
     #ifdef ALPHA_CUTOUT
     if (color.a < ALPHA_CUTOUT) {
         discard;
     }
     #endif
-
     #ifdef OIT_ALPHA_ONLY
     executeAlphaOnlyPhase(gl_FragCoord.z, color.a);
     #else
