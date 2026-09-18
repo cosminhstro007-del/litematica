@@ -1022,3 +1022,27 @@ if packet.exists():
     packet.write_text(txt)
 
 print("Ported feeding InteractionResult, cooking FuelValues, and networking packet creation to 26.x.")
+
+
+# Fabric API lookup cache implementation renamed ServerWorldCache -> ServerLevelCache.
+sbe = java_root / "net/p3pp3rf1y/sophisticatedcore/extensions/block/entity/SophisticatedBlockEntity.java"
+if sbe.exists():
+    txt = sbe.read_text(errors="ignore")
+    txt = txt.replace(
+        "net.fabricmc.fabric.impl.lookup.block.ServerWorldCache",
+        "net.fabricmc.fabric.impl.lookup.block.ServerLevelCache"
+    )
+    txt = txt.replace("(ServerWorldCache) serverLevel", "(ServerLevelCache) serverLevel")
+    sbe.write_text(txt)
+
+# SFL BucketPickupHandlerWrapper now carries the acting player explicitly.
+pump = java_root / "net/p3pp3rf1y/sophisticatedcore/upgrades/pump/PumpUpgradeWrapper.java"
+if pump.exists():
+    txt = pump.read_text(errors="ignore")
+    txt = txt.replace(
+        "new BucketPickupHandlerWrapper(/*player, */bucketPickup, level, pos)",
+        "new BucketPickupHandlerWrapper(player, bucketPickup, level, pos)"
+    )
+    pump.write_text(txt)
+
+print("Ported Fabric block lookup cache name and bucket pickup wrapper player parameter.")
