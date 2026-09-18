@@ -820,3 +820,39 @@ for rel in [
     jf.write_text(txt)
 
 print("Ported entity inventory capability registrations to EntityTypes and explicit container/player casts.")
+
+
+# 26.x NBT primitive tags are records and typed array accessors return Optional.
+for jf in java_root.rglob("*.java"):
+    txt = jf.read_text(errors="ignore")
+    new = txt
+    new = new.replace("((LongTag) t).getAsLong()", "((LongTag) t).value()")
+    new = new.replace("((IntTag) t).getAsInt()", "((IntTag) t).value()")
+    new = new.replace("((IntTag) v).getAsInt()", "((IntTag) v).value()")
+    new = re.sub(r'Arrays\.stream\(([^;\n]+)\.getIntArray\(([^)\n]+)\)\)', r'Arrays.stream(\1.getIntArray(\2).orElseGet(() -> new int[0]))', new)
+    new = re.sub(r'Arrays\.stream\(([^;\n]+)\.getLongArray\(([^)\n]+)\)\)', r'Arrays.stream(\1.getLongArray(\2).orElseGet(() -> new long[0]))', new)
+    if new != txt:
+        jf.write_text(new)
+
+# putIntArray no longer accepts List<Integer>; normalize the known runtime list write.
+ids = java_root / "net/p3pp3rf1y/sophisticatedcore/settings/itemdisplay/ItemDisplaySettingsCategory.java"
+if ids.exists():
+    txt = ids.read_text(errors="ignore")
+    txt = txt.replace(
+        "categoryNbt.putIntArray(SLOTS_TAG, slotIndexes);",
+        "categoryNbt.putIntArray(SLOTS_TAG, slotIndexes.stream().mapToInt(Integer::intValue).toArray());",
+    )
+    ids.write_text(txt)
+
+# Forge Config API Port 26.3 exposes the v5 Fabric event facade.
+cfg = java_root / "net/p3pp3rf1y/sophisticatedcore/Config.java"
+if cfg.exists():
+    txt = cfg.read_text(errors="ignore")
+    txt = txt.replace(
+        "fuzs.forgeconfigapiport.fabric.api.neoforge.v4.NeoForgeModConfigEvents",
+        "fuzs.forgeconfigapiport.fabric.api.v5.ModConfigEvents",
+    )
+    txt = txt.replace("NeoForgeModConfigEvents.reloading", "ModConfigEvents.reloading")
+    cfg.write_text(txt)
+
+print("Applied 26.x NBT primitive/array and Forge Config v5 event API fixes.")
