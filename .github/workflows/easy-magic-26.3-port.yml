@@ -109,6 +109,19 @@ jobs:
               "}\n"
           )
           print(p.read_text())
+
+          # Minecraft 26.3 refactored ScreenEffectRenderer internals. Easy Magic does not
+          # use Puzzles Lib's FabricRendererEvents block-overlay hook, so keep this mixin inert.
+          p = Path("puzzleslib-src/Fabric/src/main/java/fuzs/puzzleslib/fabric/mixin/client/ScreenEffectRendererFabricMixin.java")
+          p.write_text(
+              "package fuzs.puzzleslib.fabric.mixin.client;\n\n"
+              "import net.minecraft.client.renderer.ScreenEffectRenderer;\n"
+              "import org.spongepowered.asm.mixin.Mixin;\n\n"
+              "@Mixin(ScreenEffectRenderer.class)\n"
+              "abstract class ScreenEffectRendererFabricMixin {\n"
+              "}\n"
+          )
+          print(p.read_text())
           PY
 
       - name: Remove Puzzles datagen-only APIs not yet ported to 26.3
