@@ -448,3 +448,25 @@ for jf in java_root.rglob("*.java"):
         jf.write_text(new)
 
 print("Applied ItemStack.typeHolder().tags and Level.recipeAccess migrations.")
+
+
+# Fix Java functional suppliers and 26.x container/fluid accessors.
+for jf in java_root.rglob("*.java"):
+    txt = jf.read_text(errors="ignore")
+    new = txt
+    new = new.replace(".asInt().orElse(0)", ".getAsInt()")
+    new = new.replace(".asLong().orElse(0L)", ".getAsLong()")
+    new = new.replace(".asLong().orElse(0)", ".getAsLong()")
+    new = new.replace("tagName.identifier()", "tagName.location()")
+    new = new.replace("player.getInventory().items.size()", "player.getInventory().getContainerSize()")
+    new = new.replace("inv.items.size()", "inv.getContainerSize()")
+    if new != txt:
+        jf.write_text(new)
+
+tank = java_root / "net/p3pp3rf1y/sophisticatedcore/upgrades/tank/TankUpgradeWrapper.java"
+if tank.exists():
+    txt = tank.read_text(errors="ignore")
+    txt = txt.replace("contents.getVariant()", "contents.getResource()")
+    tank.write_text(txt)
+
+print("Applied supplier, TagKey, inventory size, and FluidStack resource accessor fixes.")
