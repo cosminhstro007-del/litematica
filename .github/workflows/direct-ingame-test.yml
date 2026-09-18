@@ -1,0 +1,114 @@
+name: direct-ingame-litematica-test
+on:
+  push:
+    branches: [ "DEV/26.3" ]
+
+jobs:
+  direct-ingame:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Prepare runtime
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb mesa-utils libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers openbox
+          chmod +x ./gradlew
+          mkdir -p proof run
+          echo "eula=true" > run/eula.txt
+
+      - name: Generate a 26.3 world
+        shell: bash
+        run: |
+          set +e
+          timeout 70s ./gradlew runServer --args="nogui" > proof/server.out 2>&1
+          code=$?
+          set -e
+          cat proof/server.out
+          if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
+            exit "$code"
+          fi
+          test -f run/world/level.dat
+          mkdir -p run/saves
+          rm -rf run/saves/LitematicaCITest
+          cp -a run/world run/saves/LitematicaCITest
+
+      - name: Add temporary in-game GUI verifier
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("src/main/java/fi/dy/masa/litematica/scheduler/ClientTickHandler.java")
+          s = p.read_text()
+          s = s.replace(
+              "public class ClientTickHandler implements IClientTickHandler\n{",
+              "public class ClientTickHandler implements IClientTickHandler\n{\n    private static boolean ciMenuRequested;\n    private static boolean ciMenuVerified;"
+          )
+          needle = "        if (mc.level != null && mc.player != null)\n        {"
+          repl = """        if (mc.level != null && mc.player != null)
+        {
+            if (Boolean.getBoolean("litematica.ci.ingame"))
+            {
+                if (ciMenuRequested == false)
+                {
+                    fi.dy.masa.malilib.gui.GuiBase.openGui(new fi.dy.masa.litematica.gui.GuiMainMenu());
+                    ciMenuRequested = true;
+                    fi.dy.masa.litematica.Litematica.LOGGER.info("[CI-INGAME] Requested Litematica main menu in singleplayer world");
+                }
+                else if (ciMenuVerified == false && mc.gui.screen() instanceof fi.dy.masa.litematica.gui.GuiMainMenu)
+                {
+                    ciMenuVerified = true;
+                    fi.dy.masa.litematica.Litematica.LOGGER.info("[CI-INGAME] VERIFIED Litematica GuiMainMenu open in singleplayer world");
+                }
+            }"""
+          if needle not in s:
+              raise SystemExit("tick insertion point not found")
+          s = s.replace(needle, repl, 1)
+          p.write_text(s)
+          PY
+
+      - name: Launch directly into singleplayer and verify Litematica GUI
+        shell: bash
+        run: |
+          Xvfb :99 -screen 0 1280x720x24 +extension GLX +render -noreset > proof/xvfb.out 2>&1 &
+          xvfb_pid=$!
+          export DISPLAY=:99
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
+          openbox --sm-disable > proof/openbox.out 2>&1 &
+          openbox_pid=$!
+          sleep 2
+
+          set +e
+          JAVA_TOOL_OPTIONS="-Dlitematica.ci.ingame=true" timeout 100s ./gradlew runClient --args="--quickPlaySingleplayer LitematicaCITest" > proof/client.out 2>&1
+          code=$?
+          set -e
+
+          cp run/logs/latest.log proof/latest.log || true
+          tail -n 500 proof/latest.log || true
+          kill "$openbox_pid" "$xvfb_pid" 2>/dev/null || true
+
+          if [ "$code" -ne 124 ]; then
+            echo "Client exited before test timeout: $code"
+            exit 1
+          fi
+
+          grep -Fq "[CI-INGAME] VERIFIED Litematica GuiMainMenu open in singleplayer world" proof/latest.log
+          grep -Eiq "Placement Manager calculated thread limit" proof/latest.log
+          grep -Eiq "BlockModelCacheSchematic: refreshing model cache" proof/latest.log
+          grep -Eiq "litematica 0\.28\.99-dev" proof/latest.log
+
+      - name: Upload direct in-game proof
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: direct-ingame-proof
+          path: proof/
