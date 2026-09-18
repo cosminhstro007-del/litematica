@@ -241,7 +241,9 @@ for rel in random_files:
     jf = java_root / rel
     if jf.exists():
         txt = jf.read_text(errors="ignore")
-        jf.write_text(re.sub(r"\.random\b", ".getRandom()", txt))
+        fixed = re.sub(r"\.random\b", ".getRandom()", txt)
+        fixed = fixed.replace("Math.getRandom()()", "Math.random()")
+        jf.write_text(fixed)
 
 print("Applied Minecraft 26.x NBT/Level/drop/recipe compatibility patches.")
 
