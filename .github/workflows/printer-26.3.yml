@@ -187,6 +187,45 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean build --stacktrace
 
+      - name: Runtime launch smoke test with Printer
+        shell: bash
+        run: |
+          PRINTER_JAR="$(find "$RUNNER_TEMP/litematica-printer/build/libs" -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' | head -n1)"
+          test -n "$PRINTER_JAR"
+          mkdir -p "$GITHUB_WORKSPACE/run/mods"
+          cp "$PRINTER_JAR" "$GITHUB_WORKSPACE/run/mods/Litematica-Printer-26.3-Fabric.jar"
+
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb mesa-utils libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers
+          Xvfb :99 -screen 0 1280x720x24 +extension GLX +render -noreset > printer-xvfb.out 2>&1 &
+          xvfb_pid=$!
+          export DISPLAY=:99
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
+          sleep 2
+
+          set +e
+          timeout 60s ./gradlew runClient --stacktrace > printer-runclient.out 2>&1
+          code=$?
+          set -e
+          kill "$xvfb_pid" 2>/dev/null || true
+
+          cat printer-runclient.out
+          test -f run/logs/latest.log
+          tail -n 500 run/logs/latest.log
+
+          if [ "$code" -ne 124 ]; then
+            echo "Minecraft client exited before smoke-test timeout (exit $code)"
+            exit 1
+          fi
+
+          if grep -Eiq 'Mixin apply failed|InvalidMixinException|InjectionError|Could not execute entrypoint|NoSuchMethodError|NoClassDefFoundError|ExceptionInInitializerError|VerifyError|ModResolutionException|Crash report saved' run/logs/latest.log; then
+            echo "Fatal Printer/Litematica startup error detected"
+            exit 1
+          fi
+
+          grep -Eiq 'litematica_printer|Litematica Printer' run/logs/latest.log
+
       - name: Collect Printer jar
         shell: bash
         run: |
