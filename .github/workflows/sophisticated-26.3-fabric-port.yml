@@ -141,6 +141,7 @@ jobs:
               "net/p3pp3rf1y/sophisticatedcore/crafting/SCShapedRecipeBuilder.java",
               "net/p3pp3rf1y/sophisticatedcore/crafting/SCShapelessRecipeBuilder.java",
               "net/p3pp3rf1y/sophisticatedcore/crafting/ShapelessBasedRecipeBuilder.java",
+              "net/p3pp3rf1y/sophisticatedcore/crafting/ShapeBasedRecipeBuilder.java",
           ]:
               q = Path("core-src/src/main/java") / rel
               if q.exists():
