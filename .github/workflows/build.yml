@@ -1,8 +1,4 @@
-# Automatically build the project and run any configured tests for every push
-# and submitted pull request. This can help catch issues that only occur on
-# certain platforms or Java versions, and provides a first line of defence
-# against bad commits.
-
+# Automatically build the project and run a Minecraft client smoke test.
 name: build
 on: [ pull_request, push ]
 
@@ -42,23 +38,38 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb
+          sudo apt-get install -y -qq xvfb mesa-utils libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers
+          Xvfb :99 -screen 0 1280x720x24 +extension GLX +render -noreset > xvfb.out 2>&1 &
+          xvfb_pid=$!
+          export DISPLAY=:99
+          export LIBGL_ALWAYS_SOFTWARE=1
+          export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe
+          sleep 2
+          glxinfo -B | tee glxinfo.out
+
           set +e
-          timeout 75s xvfb-run -a ./gradlew runClient --stacktrace > runclient.out 2>&1
+          timeout 60s ./gradlew runClient --stacktrace > runclient.out 2>&1
           code=$?
           set -e
+          kill "$xvfb_pid" 2>/dev/null || true
+
           cat runclient.out
-          if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
-            echo "runClient exited unexpectedly with code $code"
-            exit "$code"
-          fi
           test -f run/logs/latest.log
-          tail -n 300 run/logs/latest.log
-          if grep -Eiq 'Mixin apply failed|Could not execute entrypoint|NoSuchMethodError|NoClassDefFoundError|ExceptionInInitializerError|VerifyError|ModResolutionException' run/logs/latest.log; then
-            echo "Fatal mod/runtime error detected"
+          tail -n 400 run/logs/latest.log
+
+          if [ "$code" -ne 124 ]; then
+            echo "Minecraft client did not remain running until the smoke-test timeout (exit $code)"
             exit 1
           fi
-          grep -Eiq 'litematica' run/logs/latest.log
+
+          if grep -Eiq 'Mixin apply failed|Could not execute entrypoint|NoSuchMethodError|NoClassDefFoundError|ExceptionInInitializerError|VerifyError|ModResolutionException|Failed to create backend|Crash report saved' run/logs/latest.log; then
+            echo "Fatal mod/client startup error detected"
+            exit 1
+          fi
+
+          grep -Eiq 'Loading Minecraft 26\.3' run/logs/latest.log
+          grep -Eiq 'litematica 0\.28\.99-dev' run/logs/latest.log
+          grep -Eiq 'malilib 0\.29\.99-dev' run/logs/latest.log
 
       - name: capture runtime log
         if: always()
@@ -68,8 +79,11 @@ jobs:
           path: |
             run/logs/latest.log
             runclient.out
+            glxinfo.out
+            xvfb.out
 
       - name: capture build artifacts
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: build-artifacts
