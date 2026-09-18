@@ -1,8 +1,8 @@
-name: inspect-mc26-api
+name: inspect-mc26-renderer
 on:
   push:
-    branches: [ "DEV/26.3" ]
-
+    branches:
+      - DEV/26.3
 jobs:
   inspect:
     runs-on: ubuntu-latest
@@ -13,49 +13,21 @@ jobs:
           distribution: temurin
           java-version: 25
       - uses: gradle/actions/setup-gradle@v5
-      - name: Inspect Minecraft client connection API
+      - name: inspect
         shell: bash
         run: |
           chmod +x ./gradlew
           ./gradlew classes
-          mkdir -p api-proof
-          jarfile=$(find .gradle/loom-cache/minecraftMaven -name '*26.3*.jar' | grep 'minecraft-merged' | head -n 1)
-          echo "$jarfile" > api-proof/jar.txt
-          javap -p -classpath "$jarfile" net.minecraft.client.gui.screens.ConnectScreen > api-proof/ConnectScreen.txt
-          javap -p -classpath "$jarfile" net.minecraft.client.multiplayer.resolver.ServerAddress > api-proof/ServerAddress.txt
-          javap -p -classpath "$jarfile" net.minecraft.client.multiplayer.ServerData > api-proof/ServerData.txt
-          javap -p -classpath "$jarfile" 'net.minecraft.client.multiplayer.ServerData$Type' > api-proof/ServerDataType.txt
-          javap -p -classpath "$jarfile" net.minecraft.client.multiplayer.TransferState > api-proof/TransferState.txt
-          javap -p -classpath "$jarfile" net.minecraft.client.Minecraft > api-proof/Minecraft.txt
-          cat api-proof/ConnectScreen.txt
-          cat api-proof/ServerAddress.txt
-          cat api-proof/ServerData.txt
-          cat api-proof/ServerDataType.txt
-          cat api-proof/TransferState.txt
-          echo "=== shader resource candidates ===" > api-proof/shader-list.txt
-          jar tf "$jarfile" | grep -E 'assets/minecraft/.+(terrain|chunk|solid|cutout|translucent).+\.(vsh|fsh|glsl)
+          mkdir -p render-proof
+          jarfile=$(find .gradle/loom-cache/minecraftMaven -name '*.jar' | grep '26.3' | grep 'merged' | head -n 1)
+          echo "$jarfile" > render-proof/jar.txt
+          javap -p -c -classpath "$jarfile" net.minecraft.client.renderer.chunk.ChunkSectionsToRender > render-proof/ChunkSectionsToRender.txt
+          javap -p -c -classpath "$jarfile" net.minecraft.client.renderer.chunk.ChunkSectionLayer > render-proof/ChunkSectionLayer.txt
+          javap -p -c -classpath "$jarfile" net.minecraft.client.renderer.RenderPipelines > render-proof/RenderPipelines.txt
+          jar tf "$jarfile" | grep 'assets/minecraft/shaders' > render-proof/shader-list.txt || true
+          cat render-proof/ChunkSectionsToRender.txt
+          cat render-proof/ChunkSectionLayer.txt
       - uses: actions/upload-artifact@v6
         with:
-          name: api-proof
-          path: api-proof/
- >> api-proof/shader-list.txt || true
-          jar tf "$jarfile" | grep -E 'assets/minecraft/shaders/.+\.(vsh|fsh|glsl)
-      - uses: actions/upload-artifact@v6
-        with:
-          name: api-proof
-          path: api-proof/
- | head -n 300 >> api-proof/shader-list.txt || true
-          cat api-proof/shader-list.txt
-          mkdir -p api-proof/shaders
-          while read -r entry; do
-            case "$entry" in
-              assets/minecraft/*)
-                mkdir -p "api-proof/shaders/$(dirname "$entry")"
-                unzip -p "$jarfile" "$entry" > "api-proof/shaders/$entry" || true
-                ;;
-            esac
-          done < api-proof/shader-list.txt
-      - uses: actions/upload-artifact@v6
-        with:
-          name: api-proof
-          path: api-proof/
+          name: render-proof
+          path: render-proof/
