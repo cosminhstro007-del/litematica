@@ -365,3 +365,33 @@ for jf in java_root.rglob("*.java"):
         jf.write_text(new)
 
 print("Applied Player feedback split and CompoundTag.keySet migration.")
+
+
+# More 26.x vanilla API migrations.
+for jf in java_root.rglob("*.java"):
+    txt = jf.read_text(errors="ignore")
+    new = txt
+
+    # ItemStack no longer forwards item registry tags directly.
+    new = re.sub(
+        r'(\b[A-Za-z_][A-Za-z0-9_]*Stack\b|\bstack\b|\bfirstStack\b|\bsecondStack\b)\.getTags\(\)',
+        r'\1.getItem().builtInRegistryHolder().tags()',
+        new,
+    )
+
+    # Numeric/string Tag value accessors are Optional-returning in 26.x.
+    new = new.replace(".getAsInt()", ".asInt().orElse(0)")
+    new = new.replace(".getAsLong()", ".asLong().orElse(0L)")
+    new = new.replace(".getAsString()", '.asString().orElse("")')
+
+    # Recipe#assemble lost the registry-access parameter. Handle arbitrary first arguments.
+    new = re.sub(
+        r'\.assemble\(([^;\n]+?),\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)?(?:registryAccess\(\)|registryAccess)\)',
+        r'.assemble(\1)',
+        new,
+    )
+
+    if new != txt:
+        jf.write_text(new)
+
+print("Applied item tag, NBT Tag value, and remaining Recipe.assemble migrations.")
