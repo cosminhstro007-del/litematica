@@ -100,15 +100,14 @@ jobs:
           # Easy Magic never uses Puzzles Lib's EntitySpectatorShaders API, so keep this
           # compatibility mixin present but intentionally inert for the Easy Magic runtime build.
           p = Path("puzzleslib-src/Fabric/src/main/java/fuzs/puzzleslib/fabric/mixin/client/GameRendererFabricMixin.java")
-          p.write_text("""package fuzs.puzzleslib.fabric.mixin.client;
-
-import net.minecraft.client.renderer.GameRenderer;
-import org.spongepowered.asm.mixin.Mixin;
-
-@Mixin(GameRenderer.class)
-abstract class GameRendererFabricMixin {
-}
-""")
+          p.write_text(
+              "package fuzs.puzzleslib.fabric.mixin.client;\\n\\n"
+              "import net.minecraft.client.renderer.GameRenderer;\\n"
+              "import org.spongepowered.asm.mixin.Mixin;\\n\\n"
+              "@Mixin(GameRenderer.class)\\n"
+              "abstract class GameRendererFabricMixin {\\n"
+              "}\\n"
+          )
           print(p.read_text())
           PY
 
