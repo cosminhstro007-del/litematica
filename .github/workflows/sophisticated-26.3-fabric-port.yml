@@ -230,11 +230,20 @@ jobs:
                   or ("/client/" in rel and not rel.endswith("/client/gui/utils/TranslationHelper.java"))
                   or "import net.minecraft.client." in txt
                   or "import com.mojang.blaze3d." in txt
-                  or (client_imports and not only_translation_helper)
+                  or (client_imports and not only_translation_helper and not rel.endswith("/Config.java"))
               ):
                   client_removed.append(rel)
                   jf.unlink()
           print(f"Removed {len(client_removed)} client/package-info Java files for common migration pass")
+
+          # Config is common/runtime code but references this client-facing enum. Keep a tiny
+          # compile/runtime-compatible enum during the common pass; the full client source is restored later.
+          sbp = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/client/gui/SortButtonsPosition.java")
+          sbp.parent.mkdir(parents=True, exist_ok=True)
+          sbp.write_text(
+              "package net.p3pp3rf1y.sophisticatedcore.client.gui;\n"
+              "public enum SortButtonsPosition { TITLE_LINE_RIGHT, TITLE_LINE_LEFT, BELOW_TITLE, HIDDEN }\n"
+          )
 
           # Replace TranslationHelper with a common-safe implementation for the common pass.
           th = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/client/gui/utils/TranslationHelper.java")
