@@ -10,10 +10,8 @@ jobs:
   build:
     strategy:
       matrix:
-        # Use these Java versions
         java: [ 25 ]
         distro: [ temurin ]
-        # and run on both Linux and Windows
         os: [ ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     steps:
@@ -35,14 +33,43 @@ jobs:
           cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' && github.ref != 'refs/heads/dev' }}
 
       - name: make gradle wrapper executable
-        if: ${{ runner.os != 'Windows' }}
         run: chmod +x ./gradlew
 
       - name: build
         run: ./gradlew build
 
+      - name: runtime launch smoke test
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+          set +e
+          timeout 75s xvfb-run -a ./gradlew runClient --stacktrace > runclient.out 2>&1
+          code=$?
+          set -e
+          cat runclient.out
+          if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
+            echo "runClient exited unexpectedly with code $code"
+            exit "$code"
+          fi
+          test -f run/logs/latest.log
+          tail -n 300 run/logs/latest.log
+          if grep -Eiq 'Mixin apply failed|Could not execute entrypoint|NoSuchMethodError|NoClassDefFoundError|ExceptionInInitializerError|VerifyError|ModResolutionException' run/logs/latest.log; then
+            echo "Fatal mod/runtime error detected"
+            exit 1
+          fi
+          grep -Eiq 'litematica' run/logs/latest.log
+
+      - name: capture runtime log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: runtime-log
+          path: |
+            run/logs/latest.log
+            runclient.out
+
       - name: capture build artifacts
-        if: ${{ runner.os == 'Linux' }}
         uses: actions/upload-artifact@v6
         with:
           name: build-artifacts
