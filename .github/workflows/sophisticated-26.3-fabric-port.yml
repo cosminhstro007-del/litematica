@@ -182,6 +182,37 @@ jobs:
               p = Path("sfl-src/src/main/java/com/github/salandora/sophisticatedfabriclib") / rel
               s = p.read_text().replace("MobSpawnType", "EntitySpawnReason")
               p.write_text(s)
+          # Minecraft 26.3 model package migrations.
+          package_moves = {
+              "net.minecraft.client.renderer.block.model.BakedQuad": "net.minecraft.client.resources.model.geometry.BakedQuad",
+              "net.minecraft.client.renderer.block.model.ItemTransforms": "net.minecraft.client.resources.model.cuboid.ItemTransforms",
+              "net.minecraft.client.resources.model.Material": "net.minecraft.client.resources.model.sprite.Material",
+              "net.minecraft.client.resources.model.ModelState": "net.minecraft.client.renderer.block.dispatch.ModelState",
+              "net.minecraft.world.level.BlockAndTintGetter": "net.minecraft.client.renderer.block.BlockAndTintGetter",
+              "net.minecraft.client.renderer.block.model.FaceBakery": "net.minecraft.client.resources.model.cuboid.FaceBakery",
+              "net.minecraft.client.renderer.block.model.ItemModelGenerator": "net.minecraft.client.resources.model.cuboid.ItemModelGenerator",
+              "net.minecraft.client.renderer.block.model.BlockElementFace": "net.minecraft.client.resources.model.cuboid.CuboidFace",
+              "net.minecraft.client.renderer.block.model.BlockElement": "net.minecraft.client.resources.model.cuboid.CuboidModelElement",
+          }
+          for java_file in Path("sfl-src/src/main/java").rglob("*.java"):
+              text = java_file.read_text()
+              for old, new in package_moves.items():
+                  text = text.replace(old, new)
+              # wildcard block-model imports no longer bring the cuboid/geometry classes.
+              if "import net.minecraft.client.renderer.block.model.*;" in text:
+                  text = text.replace("import net.minecraft.client.renderer.block.model.*;",
+                      "import net.minecraft.client.renderer.block.model.*;\n"
+                      "import net.minecraft.client.resources.model.cuboid.CuboidModelElement;\n"
+                      "import net.minecraft.client.resources.model.cuboid.CuboidFace;\n"
+                      "import net.minecraft.client.resources.model.cuboid.FaceBakery;\n"
+                      "import net.minecraft.client.resources.model.cuboid.ItemModelGenerator;\n"
+                      "import net.minecraft.client.resources.model.geometry.BakedQuad;")
+              java_file.write_text(text)
+
+          # Utility moved under net.minecraft.util in 26.x.
+          p = Path("sfl-src/src/main/java/com/github/salandora/sophisticatedfabriclib/model/impl/v1/client/ModelLoadingPlugin.java")
+          if p.exists():
+              p.write_text(p.read_text().replace("import net.minecraft.Util;", "import net.minecraft.util.Util;"))
           print(Path("sfl-src/gradle.properties").read_text())
           print(Path("sfl-src/build.gradle").read_text())
           PY
