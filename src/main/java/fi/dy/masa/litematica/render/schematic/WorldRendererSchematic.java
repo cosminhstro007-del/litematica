@@ -782,7 +782,6 @@ public class WorldRendererSchematic implements IWorldSchematicRenderer
         if (startedDrawing)
         {
             profiler.popPush("fill_uniforms");      // , (int) cameraX, (int) cameraY, (int) cameraZ
-            this.getSchematicRenderState().legacyTerrainFix.updateBuffer(atlasWidth, atlasHeight, 1.0f);
             GpuBufferSlice[] transformSlices = RenderSystem.getDynamicUniforms()
                                                            .writeTransforms(
                                                                    transformValues.toArray(new DynamicGpuData.Transform[0])
@@ -791,8 +790,7 @@ public class WorldRendererSchematic implements IWorldSchematicRenderer
             profiler.popPush("fill_batch_draw");
             this.getSchematicRenderState().batchDraw = new ChunkRenderBatchDraw(blockAtlas, renderMap,
                                                       renderCollidingBlocks, renderAsTranslucent, indexCount,
-                                                      transformSlices,
-                                                      this.getSchematicRenderState().legacyTerrainFix.getCurrentBufferSlice()
+                                                      transformSlices
             );
             this.shouldDraw = true;
         }
