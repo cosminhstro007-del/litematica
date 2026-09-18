@@ -132,6 +132,26 @@ jobs:
                   jf.unlink()
           print(f"Removed {len(client_removed)} client Java files for common migration pass")
 
+          # Neutralize optional compat registration during the base/common pass.
+          mc = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/init/ModCompat.java")
+          if mc.exists():
+              mc.write_text("""package net.p3pp3rf1y.sophisticatedcore.init;
+
+public final class ModCompat {
+    private ModCompat() {}
+    public static void register() {}
+}
+""")
+
+          # Client model geometry registration is restored in the client port pass.
+          sc = Path("core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/SophisticatedCore.java")
+          if sc.exists():
+              ss = sc.read_text()
+              ss = ss.replace("import io.github.fabricators_of_create.porting_lib.models.geometry.RegisterGeometryLoadersCallback;\n", "")
+              ss = ss.replace("import net.p3pp3rf1y.sophisticatedcore.util.model.DynamicFluidContainerModel;\n", "")
+              ss = ss.replace("RegisterGeometryLoadersCallback.EVENT.register(loaders -> loaders.put(SophisticatedCore.getRL(\"fluid_container\"), DynamicFluidContainerModel.Loader.INSTANCE));", "")
+              sc.write_text(ss)
+
           # The old buildSrc processor post-processes remapJar. 26.x is unobfuscated,
           # so post-process the ordinary jar instead.
           dp = Path("core-src/buildSrc/src/main/java/com/github/salandora/sophisticatedcorebuild/processor/DeduplicationProcessor.java")
