@@ -1046,3 +1046,93 @@ if pump.exists():
     pump.write_text(txt)
 
 print("Ported Fabric block lookup cache name and bucket pickup wrapper player parameter.")
+
+
+# Keep common/server portions of block extension interfaces after client-only source pruning.
+block_ext = java_root / "net/p3pp3rf1y/sophisticatedcore/extensions/block/SophisticatedBlock.java"
+block_ext.parent.mkdir(parents=True, exist_ok=True)
+block_ext.write_text(r'''package net.p3pp3rf1y.sophisticatedcore.extensions.block;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+
+public interface SophisticatedBlock {
+    default boolean sophisticatedCore_addLandingEffects(BlockState state1, ServerLevel level, BlockPos pos, BlockState state2, LivingEntity entity, int numberOfParticles) {
+        return false;
+    }
+
+    default boolean sophisticatedCore_addRunningEffects(BlockState state, Level level, BlockPos pos, Entity entity) {
+        return false;
+    }
+}
+''')
+
+block_state_ext = java_root / "net/p3pp3rf1y/sophisticatedcore/extensions/block/SophisticatedBlockState.java"
+block_state_ext.write_text(r'''package net.p3pp3rf1y.sophisticatedcore.extensions.block;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+
+public interface SophisticatedBlockState {
+    private BlockState self() {
+        return (BlockState) this;
+    }
+
+    default boolean sophisticatedCore_addLandingEffects(ServerLevel level, BlockPos pos, BlockState state2, LivingEntity entity, int numberOfParticles) {
+        return ((SophisticatedBlock)(Object) self().getBlock()).sophisticatedCore_addLandingEffects(self(), level, pos, state2, entity, numberOfParticles);
+    }
+
+    default boolean sophisticatedCore_addRunningEffects(Level level, BlockPos pos, Entity entity) {
+        return ((SophisticatedBlock)(Object) self().getBlock()).sophisticatedCore_addRunningEffects(self(), level, pos, entity);
+    }
+}
+''')
+
+# This vendored SFL NeoForge-style component handler is not referenced by Core runtime and
+# depends on a separate SFL injected-interface package that is not needed for this port.
+unused_sfl_component = java_root / "com/github/salandora/sophisticatedfabriclib/transfer/api/v1/ComponentItemHandler.java"
+if unused_sfl_component.exists():
+    unused_sfl_component.unlink()
+
+# Fluid container item context: SFL replacement is a factory interface, not a mutable constructor.
+fluid_util = java_root / "net/p3pp3rf1y/sophisticatedcore/fluid/FluidUtil.java"
+if fluid_util.exists():
+    txt = fluid_util.read_text(errors="ignore")
+    txt = txt.replace(
+        "import io.github.fabricators_of_create.porting_lib.transfer.MutableContainerItemContext;",
+        "import com.github.salandora.sophisticatedfabriclib.transfer.api.v1.ItemStackContainerItemContext;"
+    )
+    txt = txt.replace(
+        "import com.github.salandora.sophisticatedfabriclib.transfer.api.v1.ItemStackContainerItemContext;",
+        "import com.github.salandora.sophisticatedfabriclib.transfer.api.v1.ItemStackContainerItemContext;"
+    )
+    txt = txt.replace(
+        "new MutableContainerItemContext(containerCopy)",
+        "ItemStackContainerItemContext.ofSingleStack(containerCopy)"
+    )
+    fluid_util.write_text(txt)
+
+# Tuple was removed from vanilla. Storage dye recipe only needs a simple key/value pair.
+dye = java_root / "net/p3pp3rf1y/sophisticatedcore/crafting/StorageDyeRecipeBase.java"
+if dye.exists():
+    txt = dye.read_text(errors="ignore")
+    txt = txt.replace("import net.minecraft.util.Tuple;\n", "")
+    txt = txt.replace("Tuple<Integer, ItemStack> columnStorage = null;", "Map.Entry<Integer, ItemStack> columnStorage = null;")
+    txt = txt.replace("new Tuple<>(column, slotStack)", "Map.entry(column, slotStack)")
+    txt = txt.replace("columnStorage.getB()", "columnStorage.getValue()")
+    txt = txt.replace("columnStorage.getA()", "columnStorage.getKey()")
+    txt = txt.replace(
+        "public ItemStack assemble(CraftingInput inv, HolderLookup.Provider registries)",
+        "public ItemStack assemble(CraftingInput inv)"
+    )
+    dye.write_text(txt)
+
+print("Restored common block extensions, ported fluid context and dye pair, removed unused SFL component handler.")
