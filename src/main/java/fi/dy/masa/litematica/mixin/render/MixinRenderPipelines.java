@@ -51,7 +51,6 @@ public abstract class MixinRenderPipelines
 				              .withBindGroupLayout(BindGroupLayouts.PROJECTION)
 				              .withBindGroupLayout(BindGroupLayouts.FOG)
 				              .withBindGroupLayout(BindGroupLayouts.SAMPLER0_SAMPLER2)
-				              .withBindGroupLayout(LitematicaPipelines.LEGACY_TERRAIN_GROUP)
                               .withVertexBinding(0, DefaultVertexFormat.BLOCK)
                               .withColorTargetState(ColorTargetState.DEFAULT)
                               .withPrimitiveTopology(PrimitiveTopology.QUADS)
