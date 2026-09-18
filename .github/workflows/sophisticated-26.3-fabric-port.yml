@@ -95,16 +95,15 @@ jobs:
           import shutil
           sfl_root = Path("sfl-src/src/main/java/com/github/salandora/sophisticatedfabriclib")
           core_sfl_root = Path("core-src/src/main/java/com/github/salandora/sophisticatedfabriclib")
-          for rel in [
-              "util",
-              "transfer/api/v1",
-              "fluid/api/v1",
-              "energy/api/v1"
-          ]:
+          for rel in ["util", "transfer", "fluid", "energy"]:
               src = sfl_root / rel
               dst = core_sfl_root / rel
               if src.exists():
                   shutil.copytree(src, dst, dirs_exist_ok=True)
+          root_bootstrap = sfl_root / "SophisticatedFabricLib.java"
+          if root_bootstrap.exists():
+              core_sfl_root.mkdir(parents=True, exist_ok=True)
+              shutil.copy2(root_bootstrap, core_sfl_root / root_bootstrap.name)
 
           # Replace Porting Lib APIs that have direct SFL equivalents.
           import_map = {
