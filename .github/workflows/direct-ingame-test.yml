@@ -38,8 +38,8 @@ jobs:
           fi
           test -f run/world/level.dat
           mkdir -p run/saves
-          rm -rf run/saves/LitematicaCITest
-          cp -a run/world run/saves/LitematicaCITest
+          rm -rf run/saves/world
+          cp -a run/world run/saves/world
 
       - name: Add temporary in-game GUI verifier
         shell: bash
@@ -59,11 +59,11 @@ jobs:
           sleep 2
 
           set +e
-          JAVA_TOOL_OPTIONS="-Dlitematica.ci.ingame=true" timeout 100s ./gradlew runClient --args="--quickPlaySingleplayer LitematicaCITest" > proof/client.out 2>&1
+          JAVA_TOOL_OPTIONS="-Dlitematica.ci.ingame=true" timeout 100s ./gradlew runClient --args="--quickPlaySingleplayer world --quickPlayPath quickplay.json" > proof/client.out 2>&1
           code=$?
           set -e
 
-          cp run/logs/latest.log proof/latest.log || true
+          cp run/logs/latest.log proof/latest.log || true\n          cp run/quickplay.json proof/quickplay.json 2>/dev/null || true
           tail -n 500 proof/latest.log || true
           kill "$openbox_pid" "$xvfb_pid" 2>/dev/null || true
 
