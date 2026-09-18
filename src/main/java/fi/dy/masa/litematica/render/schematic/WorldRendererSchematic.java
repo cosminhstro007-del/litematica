@@ -8,7 +8,6 @@ import it.unimi.dsi.fastutil.objects.ReferenceArrayList;
 import org.apache.logging.log4j.Logger;
 import org.joml.*;
 
-import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.renderpearl.api.buffers.GpuBuffer;
@@ -803,7 +802,7 @@ public class WorldRendererSchematic implements IWorldSchematicRenderer
     }
 
     @Override
-    public void drawBlockLayerGroup(RenderTarget fb, ChunkSectionLayerGroup group)
+    public void drawBlockLayerGroup(RenderPass pass, ChunkSectionLayerGroup group)
     {
 //        LOGGER.warn("[WorldRenderer] drawBlockLayerGroup() [{}]", group.label());
         if (this.getSchematicRenderState().hasBatchDraw() && this.shouldDraw)
@@ -823,8 +822,14 @@ public class WorldRendererSchematic implements IWorldSchematicRenderer
 
 //            this.dumpSampler(sampler);
 
-            this.getSchematicRenderState().getBatchDraw().draw(fb, group, sampler, this.profiler);
-            RenderSystem.setShaderFog(this.vanillaFogBuffer);
+            try
+            {
+                this.getSchematicRenderState().getBatchDraw().draw(pass, group, sampler, this.profiler);
+            }
+            finally
+            {
+                RenderSystem.setShaderFog(this.vanillaFogBuffer);
+            }
 
             this.profiler.pop();
         }
