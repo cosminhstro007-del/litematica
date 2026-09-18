@@ -795,3 +795,28 @@ public class SettingsTemplateStorage extends SavedData {
 ''')
 
 print("Ported SettingsTemplateStorage to codec-based SavedDataType API.")
+
+
+# Minecraft 26.3 split entity constants into EntityTypes. Fabric entity lookup callbacks
+# are typed as Entity, so narrow to the known vanilla inventory entity interfaces explicitly.
+for rel in [
+    "net/p3pp3rf1y/sophisticatedcore/util/Capabilities.java",
+    "com/github/salandora/sophisticatedfabriclib/util/Capabilities.java",
+]:
+    jf = java_root / rel
+    if not jf.exists():
+        continue
+    txt = jf.read_text(errors="ignore")
+    txt = txt.replace("import net.minecraft.world.entity.EntityType;", "import net.minecraft.world.entity.EntityType;\nimport net.minecraft.world.entity.EntityTypes;\nimport net.minecraft.world.Container;\nimport net.minecraft.world.entity.player.Player;")
+    for name in ["CHEST_BOAT", "CHEST_MINECART", "HOPPER_MINECART", "PLAYER"]:
+        txt = txt.replace(f"EntityType.{name}", f"EntityTypes.{name}")
+    if "sophisticatedcore/util/Capabilities.java" in rel:
+        txt = txt.replace("InventoryStorageWrapper.of(entity)", "InventoryStorageWrapper.of((Container) entity)")
+        txt = txt.replace("InventoryStorageWrapper.of(player)", "InventoryStorageWrapper.of((Player) player)")
+    else:
+        txt = txt.replace("InvWrapper.of(entity)", "InvWrapper.of((Container) entity)")
+        txt = txt.replace("InvWrapper.of(inventory)", "InvWrapper.of((Container) inventory)")
+        txt = txt.replace("PlayerInvWrapper.of(player)", "PlayerInvWrapper.of((Player) player)")
+    jf.write_text(txt)
+
+print("Ported entity inventory capability registrations to EntityTypes and explicit container/player casts.")
