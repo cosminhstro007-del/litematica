@@ -181,11 +181,12 @@ jobs:
         if: always()
         shell: bash
         run: |
-          jarfile="$(find sfl-src/.gradle ~/.gradle/caches -type f -name '*.jar' 2>/dev/null | grep -E 'minecraft.*26\.3|26\.3.*minecraft' | head -1 || true)"
+          jarfile="$(find sfl-src/.gradle ~/.gradle/caches -type f -name '*.jar' 2>/dev/null | grep -E 'minecraft.*26\\.3|26\\.3.*minecraft' | head -1 || true)"
           echo "Minecraft jar: $jarfile"
           if [ -n "$jarfile" ]; then
             echo "=== block/model ==="
-            jar tf "$jarfile" | grep -E '^net/minecraft/client/(renderer/block/model|resources/model|renderer/item)/.*\.class        run: |
+            jar tf "$jarfile" | grep -E '^net/minecraft/client/(renderer/block/model|resources/model|renderer/item)/.*\\.class        working-directory: sfl-src
+        run: |
           ./gradlew build -x test --stacktrace
           find build/libs -maxdepth 1 -type f -ls
 
@@ -204,7 +205,8 @@ jobs:
           path: out/
  | head -1200 || true
             echo "=== spawn ==="
-            jar tf "$jarfile" | grep -E '^net/minecraft/world/entity/.*(Spawn|spawn).*\.class        run: |
+            jar tf "$jarfile" | grep -E '^net/minecraft/world/entity/.*(Spawn|spawn).*\\.class        working-directory: sfl-src
+        run: |
           ./gradlew build -x test --stacktrace
           find build/libs -maxdepth 1 -type f -ls
 
@@ -223,7 +225,8 @@ jobs:
           path: out/
  | head -300 || true
             echo "=== loot condition ==="
-            jar tf "$jarfile" | grep -E '^net/minecraft/world/level/storage/loot/.*(Condition|Predicate|predicate).*\.class        run: |
+            jar tf "$jarfile" | grep -E '^net/minecraft/world/level/storage/loot/.*(Condition|Predicate|predicate).*\\.class        working-directory: sfl-src
+        run: |
           ./gradlew build -x test --stacktrace
           find build/libs -maxdepth 1 -type f -ls
 
@@ -242,7 +245,6 @@ jobs:
           path: out/
  | head -300 || true
           fi
-
       - name: Build Sophisticated Fabric Lib 26.3
         working-directory: sfl-src
         run: |
