@@ -19,6 +19,13 @@ jobs:
           ref: 26.2.x
           path: easymagic-src
 
+      - name: Checkout Puzzles Lib 26.3 source
+        uses: actions/checkout@v6
+        with:
+          repository: Fuzss/puzzles-lib
+          ref: 26.3.x
+          path: puzzleslib-src
+
       - name: Setup Java 25
         uses: actions/setup-java@v5
         with:
@@ -28,7 +35,27 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      - name: Port project metadata to Minecraft 26.3
+      - name: Build Puzzles Lib 26.3 Fabric
+        working-directory: puzzleslib-src
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :Fabric:clean :Fabric:build --stacktrace
+          find Fabric/build/libs -maxdepth 1 -type f -ls
+
+      - name: Prepare local Puzzles Lib dependency
+        shell: bash
+        run: |
+          mkdir -p easymagic-src/deps
+          jar="$(find puzzleslib-src/Fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' ! -name '*dev*' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
+          if [ -z "$jar" ]; then
+            jar="$(find puzzleslib-src/Fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
+          fi
+          test -n "$jar"
+          cp "$jar" easymagic-src/deps/puzzleslib-26.3.jar
+          cp "$jar" PuzzlesLib-26.3-Fabric-26.3.0.jar
+          unzip -p PuzzlesLib-26.3-Fabric-26.3.0.jar fabric.mod.json | tee puzzleslib-fabric-mod.json
+
+      - name: Port Easy Magic source/build to Minecraft 26.3
         shell: bash
         run: |
           python3 - <<'PY'
@@ -47,8 +74,16 @@ jobs:
           data["mod"]["version"] = "26.3.0"
           m.write_text(json.dumps(data, indent=4) + "\n")
 
+          b = Path("easymagic-src/Fabric/build.gradle.kts")
+          s = b.read_text()
+          s = s.replace(
+              "modApi(sharedLibs.puzzleslib.fabric)",
+              'modApi(files("../deps/puzzleslib-26.3.jar"))\n    modApi(sharedLibs.forgeconfigapiport.fabric)'
+          )
+          b.write_text(s)
+
           print(p.read_text())
-          print(m.read_text())
+          print(b.read_text())
           PY
 
       - name: Build Fabric Easy Magic
@@ -56,9 +91,9 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew :Fabric:clean :Fabric:build --stacktrace
-          find Fabric/build/libs -maxdepth 1 -type f -ls || true
+          find Fabric/build/libs -maxdepth 1 -type f -ls
 
-      - name: Select Fabric jar
+      - name: Select Easy Magic Fabric jar
         shell: bash
         run: |
           jar="$(find easymagic-src/Fabric/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' ! -name '*dev*' -printf '%s %p\n' | sort -nr | head -1 | cut -d' ' -f2-)"
@@ -98,7 +133,7 @@ jobs:
           fi
           test -n "$log"
           cp "$log" ../latest.log
-          tail -n 600 ../latest.log
+          tail -n 700 ../latest.log
 
           if [ "$code" -ne 124 ]; then
             echo "Minecraft client exited before smoke-test timeout (exit $code)"
@@ -115,14 +150,16 @@ jobs:
           grep -Eiq 'puzzles lib|puzzleslib' ../latest.log
           grep -Eiq 'forge config api port|forgeconfigapiport' ../latest.log
 
-      - name: Upload Easy Magic jar
+      - name: Upload port jars
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: EasyMagic-26.3-Fabric
           path: |
             EasyMagic-26.3-Fabric-26.3.0.jar
+            PuzzlesLib-26.3-Fabric-26.3.0.jar
             easymagic-fabric-mod.json
+            puzzleslib-fabric-mod.json
 
       - name: Upload runtime logs
         if: always()
