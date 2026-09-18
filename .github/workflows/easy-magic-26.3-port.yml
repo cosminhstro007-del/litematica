@@ -79,7 +79,7 @@ jobs:
           s = b.read_text()
           s = s.replace(
               "modApi(sharedLibs.puzzleslib.fabric)",
-              'modApi(files("../deps/puzzleslib-26.3.jar"))'
+              'modApi(files("../deps/puzzleslib-26.3.jar"))\n    modApi(sharedLibs.forgeconfigapiport.fabric)'
           )
           b.write_text(s)
 
