@@ -27,6 +27,13 @@ jobs:
           ref: 1.21.1-fabric-dev
           path: sfl-src
 
+      - name: Checkout official Sophisticated Core 26.2 donor
+        uses: actions/checkout@v6
+        with:
+          repository: P3pp3rF1y/SophisticatedCore
+          ref: 26.2
+          path: upstream-26.2-src
+
       - name: Checkout Porting Lib transfer reference
         uses: actions/checkout@v6
         with:
@@ -387,6 +394,9 @@ jobs:
 
       - name: Restore Core client/runtime sources
         run: python3 .github/scripts/restore-sophisticated-core-client-26.3.py
+
+      - name: Overlay platform-neutral official 26.2 client code
+        run: python3 .github/scripts/overlay-sophisticated-core-upstream-26.2-client.py
 
       - name: Apply deterministic Minecraft 1.21.1 to 26.3 client renames
         shell: bash
