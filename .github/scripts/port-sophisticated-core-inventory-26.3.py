@@ -2404,3 +2404,240 @@ if not tank.exists():
     tank.write_text(raw)
 
 print("Applied seventh MC 26.3 targeted cleanup pass.")
+
+
+# Eighth MC 26.3 cleanup pass: server recipe access, permissions, entities, fluids, and robust persistence hooks.
+
+# Robustly migrate all legacy client-message calls in the template container.
+def patch_template_messages(t):
+    t = t.replace("getPlayer().displayClientMessage(", "getPlayer().sendSystemMessage(")
+    # sendSystemMessage only accepts the component; strip the old actionBar=false argument.
+    t = re.sub(r'(getPlayer\(\)\.sendSystemMessage\((?:(?!getPlayer\(\)\.sendSystemMessage).)*?)\s*,\s*false\s*\);',
+               r'\1);', t, flags=re.S)
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/common/gui/TemplatePersistanceContainer.java", patch_template_messages)
+
+# Chest boats became one EntityType per wood variant in 26.3.
+def patch_capabilities_entities(t):
+    t = t.replace("EntityTypes.CHEST_BOAT,",
+                  """EntityTypes.OAK_CHEST_BOAT,
+                    EntityTypes.SPRUCE_CHEST_BOAT,
+                    EntityTypes.BIRCH_CHEST_BOAT,
+                    EntityTypes.JUNGLE_CHEST_BOAT,
+                    EntityTypes.ACACIA_CHEST_BOAT,
+                    EntityTypes.DARK_OAK_CHEST_BOAT,
+                    EntityTypes.MANGROVE_CHEST_BOAT,
+                    EntityTypes.CHERRY_CHEST_BOAT,
+                    EntityTypes.PALE_OAK_CHEST_BOAT,
+                    EntityTypes.BAMBOO_CHEST_RAFT,""")
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/util/Capabilities.java", patch_capabilities_entities)
+
+# General recipe queries are now server RecipeManager-only. The client-side recipe path is restored
+# in the later client pass; common/runtime code must tolerate there being no integrated server.
+def patch_recipe_manager_server(t):
+    t = t.replace(
+        "level.getRecipeManager().getRecipeFor(recipeType, inventory, level)",
+        "level.getServer() == null ? Optional.empty() : level.getServer().getRecipeManager().getRecipeFor(recipeType, inventory, level)"
+    )
+    t = t.replace(
+        "level.getRecipeManager().getRecipeFor(recipeType, inventory, level, ResourceKey.create(Registries.RECIPE, recipeId))",
+        "level.getServer() == null ? Optional.empty() : level.getServer().getRecipeManager().getRecipeFor(recipeType, inventory, level, ResourceKey.create(Registries.RECIPE, recipeId))"
+    )
+    old = """\t\treturn level.getRecipeManager().getRecipes().stream()
+\t\t\t\t.filter(holder -> holder.value().getType() == recipeType)
+\t\t\t\t.map(holder -> (RecipeHolder<T>) holder)
+\t\t\t\t.filter(holder -> holder.value().matches(inventory, level))
+\t\t\t\t.toList();"""
+    new = """\t\tif (level.getServer() == null) {
+\t\t\treturn Collections.emptyList();
+\t\t}
+\t\treturn level.getServer().getRecipeManager().getRecipes().stream()
+\t\t\t\t.filter(holder -> holder.value().getType() == recipeType)
+\t\t\t\t.map(holder -> (RecipeHolder<T>) holder)
+\t\t\t\t.filter(holder -> holder.value().matches(inventory, level))
+\t\t\t\t.toList();"""
+    t = t.replace(old, new)
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/util/RecipeHelper.java", patch_recipe_manager_server)
+
+# Item entities moved to EntityTypes.
+def patch_magnet_entity(t):
+    t = t.replace("EntityType.ITEM_ENTITY", "EntityTypes.ITEM")
+    if "import net.minecraft.world.entity.EntityTypes;" not in t:
+        t = t.replace("import net.minecraft.world.entity.EntityType;",
+                      "import net.minecraft.world.entity.EntityType;\nimport net.minecraft.world.entity.EntityTypes;")
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/upgrades/magnet/MagnetUpgradeWrapper.java", patch_magnet_entity)
+
+# Vanilla numeric op levels were replaced by named permissions.
+# The old level 0 remains unrestricted; level 2 maps to the gamemaster permission tier.
+def patch_infinity_permissions(t):
+    t = t.replace("sp.hasPermissions(permissionLevel)",
+                  "(permissionLevel <= 0 || sp.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER))")
+    t = t.replace("sp.hasPermissions(getPermissionLevel())",
+                  "(getPermissionLevel() <= 0 || sp.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER))")
+    if "import net.minecraft.server.permissions.Permissions;" not in t:
+        if "import net.minecraft.server.level.ServerPlayer;" in t:
+            t = t.replace("import net.minecraft.server.level.ServerPlayer;",
+                          "import net.minecraft.server.level.ServerPlayer;\nimport net.minecraft.server.permissions.Permissions;")
+        else:
+            t = t.replace("import net.minecraft.world.entity.player.Player;",
+                          "import net.minecraft.world.entity.player.Player;\nimport net.minecraft.server.permissions.Permissions;")
+    return t
+for rel in [
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/infinity/InfinityInventoryPart.java",
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/infinity/InfinityUpgradeItem.java",
+]:
+    patch(rel, patch_infinity_permissions)
+
+# Extend the vendored SFL transfer helper with the two fluid inspection helpers Sophisticated Core uses.
+transfer_util = java_root / "com/github/salandora/sophisticatedfabriclib/transfer/api/v1/TransferUtil.java"
+if transfer_util.exists():
+    txt = transfer_util.read_text(errors="ignore")
+    if "static FluidStack getFirstFluid(" not in txt:
+        insert = """
+\tstatic FluidStack getFirstFluid(Storage<FluidVariant> storage) {
+\t\tfor (StorageView<FluidVariant> view : storage.nonEmptyViews()) {
+\t\t\treturn new FluidStack(view);
+\t\t}
+\t\treturn FluidStack.EMPTY;
+\t}
+
+\tstatic FluidStack simulateExtractAnyFluid(Storage<FluidVariant> storage, long maxAmount) {
+\t\tfor (StorageView<FluidVariant> view : storage.nonEmptyViews()) {
+\t\t\tlong amount = Math.min(maxAmount, view.getAmount());
+\t\t\tif (amount > 0) {
+\t\t\t\treturn new FluidStack(view.getResource(), amount);
+\t\t\t}
+\t\t}
+\t\treturn FluidStack.EMPTY;
+\t}
+
+"""
+        txt = txt.replace("\tstatic void giveOrDropToPlayer", insert + "\tstatic void giveOrDropToPlayer")
+        imports = """import net.fabricmc.fabric.api.transfer.v1.fluid.FluidVariant;
+import net.fabricmc.fabric.api.transfer.v1.storage.Storage;
+import net.fabricmc.fabric.api.transfer.v1.storage.StorageView;
+import com.github.salandora.sophisticatedfabriclib.fluid.api.v1.FluidStack;
+"""
+        txt = txt.replace("import net.minecraft.sounds.SoundEvents;", imports + "import net.minecraft.sounds.SoundEvents;")
+        transfer_util.write_text(txt)
+
+# BucketPickupHandlerWrapper is not a Fabric Storage. Handle bucket-pickup sources directly and
+# insert one bucket transactionally into the storage.
+def patch_pump_world_pickup(t):
+    start_sig = "\tprivate boolean fillFromBlock(Level level, BlockPos pos, Storage<FluidVariant> storageFluidHandler, @Nullable Player player) {"
+    idx = t.find(start_sig)
+    if idx >= 0:
+        brace = t.find("{", idx)
+        depth = 0
+        end = brace
+        while end < len(t):
+            if t[end] == "{":
+                depth += 1
+            elif t[end] == "}":
+                depth -= 1
+                if depth == 0:
+                    end += 1
+                    break
+            end += 1
+        replacement = """\tprivate boolean fillFromBlock(Level level, BlockPos pos, Storage<FluidVariant> storageFluidHandler, @Nullable Player player) {
+\t\tFluidState fluidState = level.getFluidState(pos);
+\t\tif (fluidState.isEmpty()) {
+\t\t\treturn false;
+\t\t}
+\t\tBlockState state = level.getBlockState(pos);
+\t\tif (!(state.getBlock() instanceof BucketPickup bucketPickup)) {
+\t\t\treturn false;
+\t\t}
+\t\tFluidStack source = new FluidStack(fluidState.getType(), FluidConstants.BUCKET);
+\t\tif (!fluidFilterLogic.fluidMatches(source)) {
+\t\t\treturn false;
+\t\t}
+\t\ttry (Transaction tx = Transaction.openOuter()) {
+\t\t\tlong inserted = storageFluidHandler.insert(source.getResource(), FluidConstants.BUCKET, tx);
+\t\t\tif (inserted != FluidConstants.BUCKET) {
+\t\t\t\treturn false;
+\t\t\t}
+\t\t\tItemStack pickedUp = bucketPickup.pickupBlock(player, level, pos, state);
+\t\t\tif (pickedUp.isEmpty()) {
+\t\t\t\treturn false;
+\t\t\t}
+\t\t\ttx.commit();
+\t\t\treturn true;
+\t\t}
+\t}"""
+        t = t[:idx] + replacement + t[end:]
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/upgrades/pump/PumpUpgradeWrapper.java", patch_pump_world_pickup)
+
+# Tank background atlas constant was removed from InventoryMenu.
+patch("net/p3pp3rf1y/sophisticatedcore/upgrades/tank/TankUpgradeContainer.java",
+      lambda t: t.replace("InventoryMenu.BLOCK_ATLAS",
+                          "Identifier.fromNamespaceAndPath(\"minecraft\", \"textures/atlas/blocks.png\")"))
+
+# CraftingUpgradeContainer must use the server RecipeManager and compare ResourceKey identifiers.
+def patch_crafting_recipe_select(t):
+    old_start = "\t@Override\n\tpublic void setRecipeUsed(Identifier recipeId) {"
+    idx = t.find(old_start)
+    if idx >= 0:
+        brace = t.find("{", idx)
+        depth = 0
+        end = brace
+        while end < len(t):
+            if t[end] == "{":
+                depth += 1
+            elif t[end] == "}":
+                depth -= 1
+                if depth == 0:
+                    end += 1
+                    break
+            end += 1
+        replacement = """\t@Override
+\tpublic void setRecipeUsed(Identifier recipeId) {
+\t\tif (lastRecipe != null && lastRecipe.id().identifier().equals(recipeId)) {
+\t\t\treturn;
+\t\t}
+\t\tif (player.level().getServer() == null) {
+\t\t\treturn;
+\t\t}
+\t\tplayer.level().getServer().getRecipeManager().byKey(ResourceKey.create(Registries.RECIPE, recipeId))
+\t\t\t\t.filter(r -> r.value().getType() == RecipeType.CRAFTING)
+\t\t\t\t.map(r -> (RecipeHolder<CraftingRecipe>) r)
+\t\t\t\t.ifPresent(recipe -> {
+\t\t\t\t\tlastRecipe = recipe;
+\t\t\t\t\tfor (int i = 0; i < matchedCraftingRecipes.size(); i++) {
+\t\t\t\t\t\tif (matchedCraftingRecipes.get(i).id().identifier().equals(recipeId)) {
+\t\t\t\t\t\t\tselectCraftingResult(i);
+\t\t\t\t\t\t\treturn;
+\t\t\t\t\t\t}
+\t\t\t\t\t}
+\t\t\t\t});
+\t}"""
+        t = t[:idx] + replacement + t[end:]
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/upgrades/crafting/CraftingUpgradeContainer.java", patch_crafting_recipe_select)
+
+# Robustly replace the old CompoundTag load hook after all earlier NBT transforms.
+def patch_controller_load_robust(t):
+    t = remove_method_by_signature(t, "public void loadAdditional(")
+    marker = "\n\t@Override\n\tpublic CompoundTag getUpdateTag"
+    method = """
+\t@Override
+\tprotected void loadAdditional(ValueInput input) {
+\t\tsuper.loadAdditional(input);
+\t\tstoragePositions = input.read(\"storagePositions\", Codec.LONG.listOf()).orElse(List.of()).stream().map(BlockPos::of).collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+\t\tconnectingBlocks = input.read(\"connectingBlocks\", Codec.LONG.listOf()).orElse(List.of()).stream().map(BlockPos::of).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+\t\tnonConnectingBlocks = input.read(\"nonConnectingBlocks\", Codec.LONG.listOf()).orElse(List.of()).stream().map(BlockPos::of).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+\t\tbaseIndexes = new ArrayList<>(input.read(\"baseIndexes\", Codec.INT.listOf()).orElse(List.of()));
+\t\ttotalSlots = input.getIntOr(\"totalSlots\", 0);
+\t\tlinkedBlocks = input.read(\"linkedBlocks\", Codec.LONG.listOf()).orElse(List.of()).stream().map(BlockPos::of).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+\t}
+"""
+    if marker in t and "protected void loadAdditional(ValueInput input)" not in t:
+        t = t.replace(marker, "\n" + method + marker)
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/controller/ControllerBlockEntityBase.java", patch_controller_load_robust)
+
+print("Applied eighth MC 26.3 targeted cleanup pass.")
