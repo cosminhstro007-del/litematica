@@ -2641,3 +2641,48 @@ def patch_controller_load_robust(t):
 patch("net/p3pp3rf1y/sophisticatedcore/controller/ControllerBlockEntityBase.java", patch_controller_load_robust)
 
 print("Applied eighth MC 26.3 targeted cleanup pass.")
+
+
+# Ninth MC 26.3 cleanup pass: final three Core compile blockers.
+
+# RecipeOutput now also exposes bootstrap context lookup/list methods.
+def patch_holding_bootstrap(t):
+    anchor = "\n\tpublic Recipe<?> getRecipe() {"
+    methods = """
+\t@Override
+\tpublic <S> HolderGetter<S> lookup(ResourceKey<? extends Registry<? extends S>> registryKey) {
+\t\tthrow new UnsupportedOperationException(\"HoldingRecipeOutput does not provide registry bootstrap lookups\");
+\t}
+
+\t@Override
+\tpublic <S> Stream<Holder.Reference<S>> listContextElements(ResourceKey<? extends Registry<? extends S>> registryKey) {
+\t\treturn Stream.empty();
+\t}
+
+"""
+    if anchor in t and "listContextElements(" not in t:
+        t = t.replace(anchor, "\n" + methods + anchor)
+    imports = [
+        ("import net.minecraft.advancements.Advancement;", "import net.minecraft.advancements.Advancement;\nimport net.minecraft.core.Holder;\nimport net.minecraft.core.HolderGetter;\nimport net.minecraft.core.Registry;"),
+        ("import javax.annotation.Nullable;", "import javax.annotation.Nullable;\nimport java.util.stream.Stream;"),
+    ]
+    for old,new in imports:
+        if old in t:
+            t = t.replace(old,new)
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/crafting/HoldingRecipeOutput.java", patch_holding_bootstrap)
+
+# SFL FluidStack exposes getResource(), not the old getVariant() name.
+patch("net/p3pp3rf1y/sophisticatedcore/upgrades/tank/TankUpgradeWrapper.java",
+      lambda t: t.replace("TransferUtil.getFirstFluid(fluidHandler).getVariant()",
+                          "TransferUtil.getFirstFluid(fluidHandler).getResource()"))
+
+# Direct bucket pickup now uses a Fabric transaction.
+def patch_pump_transaction_import(t):
+    if "import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;" not in t:
+        t = t.replace("import net.fabricmc.fabric.api.transfer.v1.storage.StorageView;",
+                      "import net.fabricmc.fabric.api.transfer.v1.storage.StorageView;\nimport net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;")
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/upgrades/pump/PumpUpgradeWrapper.java", patch_pump_transaction_import)
+
+print("Applied ninth MC 26.3 final Core compile cleanup pass.")
