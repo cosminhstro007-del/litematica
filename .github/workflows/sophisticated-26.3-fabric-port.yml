@@ -40,6 +40,11 @@ jobs:
           distribution: temurin
           java-version: "25"
 
+      - name: Setup Node 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
@@ -382,6 +387,13 @@ jobs:
 
       - name: Restore Core client/runtime sources
         run: python3 .github/scripts/restore-sophisticated-core-client-26.3.py
+
+      - name: Apply deterministic Minecraft 1.21.1 to 26.3 client renames
+        shell: bash
+        run: |
+          npx -y modforge@latest bridge --from 1.21.1 --to 26.3 --namespace source core-src/src/main/java --apply --out modforge-core-client-report.md
+          echo "=== ModForge summary ==="
+          tail -100 modforge-core-client-report.md || true
 
       - name: Patch Core client APIs for 26.3
         run: python3 .github/scripts/port-sophisticated-core-client-26.3.py
