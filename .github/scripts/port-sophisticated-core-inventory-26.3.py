@@ -1954,3 +1954,173 @@ if sfl_caps.exists():
     sfl_caps.write_text(txt)
 
 print("Applied Fabric/SFL registry, fluid, networking and persistence renames for 26.3.")
+
+
+# Sixth MC 26.3 cleanup pass: targeted fixes surfaced after javac got past the sealed Holder blocker.
+
+def patch(rel, fn):
+    p = java_root / rel
+    if not p.exists():
+        return
+    txt = p.read_text(errors="ignore")
+    new = fn(txt)
+    if new != txt:
+        p.write_text(new)
+
+# ResourceKey#location -> identifier in 26.x.
+patch("com/github/salandora/sophisticatedfabriclib/util/DeferredHolder.java",
+      lambda t: t.replace("this.key.location()", "this.key.identifier()"))
+
+# RenderInfo had some duplicate Optional fallbacks introduced by the generic NBT pass.
+def patch_render_info(t):
+    t = re.sub(r'\.getCompoundOrEmpty\(([^)]+)\)\.orElseGet\(CompoundTag::new\)',
+               r'.getCompoundOrEmpty(\1)', t)
+    t = t.replace(".orElseGet(CompoundTag::new).orElseGet(CompoundTag::new)",
+                  ".orElseGet(CompoundTag::new)")
+    t = re.sub(r'(\.getIntArray\([^)]+\)\.orElseGet\(\(\) -> new int\[0\]\))\.orElseGet\(\(\) -> new int\[0\]\)',
+               r'\1', t)
+    t = re.sub(r'(\.getLongArray\([^)]+\)\.orElseGet\(\(\) -> new long\[0\]\))\.orElseGet\(\(\) -> new long\[0\]\)',
+               r'\1', t)
+    t = re.sub(r'(\.getIntOr\([^)]+\))\.orElse\([^)]+\)', r'\1', t)
+    t = re.sub(r'(\.getStringOr\([^)]+\))\.orElse\("[^"]*"\)', r'\1', t)
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/renderdata/RenderInfo.java", patch_render_info)
+
+# Settings menu: vanilla now owns RemoteSlot internally. Keep our ghost mirror as ItemStacks
+# and use the public setRemoteSlot API rather than the removed no-copy hook.
+def patch_settings_menu(t):
+    t = t.replace("synchronizer.sendInitialData(this, remoteGhostSlots, remoteCarried, new int[0]);",
+                  "synchronizer.sendInitialData(this, new ArrayList<>(remoteGhostSlots), getCarried().copy(), new int[0]);")
+    # 26.3 removed setRemoteSlotNoCopy; setRemoteSlot is the public replacement.
+    t = t.replace("@Override\n\tpublic void setRemoteSlotNoCopy(int slot, ItemStack stack) {",
+                  "public void setRemoteGhostSlot(int slot, ItemStack stack) {")
+    t = t.replace("super.setRemoteSlotNoCopy(slot, stack);", "super.setRemoteSlot(slot, stack);")
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/common/gui/SettingsContainerMenu.java", patch_settings_menu)
+
+# Straight Minecraft 26.3 method/signature renames.
+def generic_runtime_fixes(t):
+    t = t.replace(".serverLevel()", ".level()")
+    t = t.replace(".displayClientMessage(", ".displayClientMessage(")  # kept for targeted rewrite below
+    t = t.replace("EntityType.ITEM", "EntityType.ITEM_ENTITY")
+    t = t.replace("EntityTypes.CHEST_BOAT", "EntityTypes.OAK_CHEST_BOAT")
+    t = t.replace(".getHoverName().getString().orElse(\"\")", ".getHoverName().getString()")
+    t = t.replace("JukeboxSong.fromStack(level.registryAccess(), getDisc())", "JukeboxSong.fromStack(getDisc())")
+    t = t.replace(".assemble(craftMatrix.asCraftInput(), player.level().registryAccess())",
+                  ".assemble(craftMatrix.asCraftInput())")
+    t = t.replace(".onCraftedBy(player.level(), player, stack.getCount())",
+                  ".onCraftedBy(player, stack.getCount())")
+    t = t.replace(".onCraftedBy(slotStack, player.level(), player)",
+                  ".onCraftedBy(slotStack, player)")
+    t = t.replace(".setRecipeUsed(level, serverplayerentity, craftingRecipe)",
+                  ".setRecipeUsed(serverplayerentity, craftingRecipe)")
+    t = t.replace(".setRecipeUsed(player.level(), serverPlayer, lastRecipe)",
+                  ".setRecipeUsed(serverPlayer, lastRecipe)")
+    return t
+
+for rel in [
+    "net/p3pp3rf1y/sophisticatedcore/common/gui/TemplatePersistanceContainer.java",
+    "net/p3pp3rf1y/sophisticatedcore/util/InventorySorter.java",
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/stonecutter/StonecutterRecipeContainer.java",
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/jukebox/JukeboxUpgradeWrapper.java",
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/magnet/MagnetUpgradeWrapper.java",
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/crafting/CraftingUpgradeContainer.java",
+]:
+    patch(rel, generic_runtime_fixes)
+
+# Player permission helpers moved to ServerPlayer/permission checks; only these Infinity paths need it.
+for rel in [
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/infinity/InfinityInventoryPart.java",
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/infinity/InfinityUpgradeItem.java",
+]:
+    patch(rel, lambda t: t.replace("player.hasPermissions(permissionLevel)",
+                                   "player instanceof ServerPlayer sp && sp.hasPermissions(permissionLevel)")
+                         .replace("player.hasPermissions(getPermissionLevel())",
+                                  "player instanceof ServerPlayer sp && sp.hasPermissions(getPermissionLevel())")
+                         .replace("import net.minecraft.world.entity.player.Player;",
+                                  "import net.minecraft.world.entity.player.Player;\nimport net.minecraft.server.level.ServerPlayer;"))
+
+# NoSort settings: Optional<int[]>.
+patch("net/p3pp3rf1y/sophisticatedcore/settings/nosort/NoSortSettingsCategory.java",
+      lambda t: t.replace("categoryNbt.getIntArray(SELECTED_SLOTS_TAG)",
+                          "categoryNbt.getIntArray(SELECTED_SLOTS_TAG).orElseGet(() -> new int[0])"))
+
+# Fluid dimension flag moved to environment attributes. For the compile pass keep Nether behavior
+# equivalent by checking the level key; this is revisited in runtime verification.
+def patch_core_fluid(t):
+    t = t.replace("level.dimensionType().ultraWarm()", "level.dimension() == Level.NETHER")
+    t = t.replace("player.playNotifySound(sound, SoundSource.BLOCKS, 1, 1)",
+                  "player.playSound(sound, 1.0F, 1.0F)")
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/fluid/FluidUtil.java", patch_core_fluid)
+
+# Optional CraftingTweaks client glue was already removed; remove the dangling registrar too.
+compat_client = java_root / "net/p3pp3rf1y/sophisticatedcore/compat/craftingtweaks/CraftingTweaksCompatClient.java"
+if compat_client.exists():
+    compat_client.unlink()
+
+# ClientRegistryHelper is client-only and excluded from the common pass. RegistryHelper can use
+# the active server registry when present and otherwise report empty.
+def patch_registry_helper(t):
+    t = t.replace("return ClientRegistryHelper.getRegistryAccess();", "return null;")
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/util/RegistryHelper.java", patch_registry_helper)
+
+# SFL context class was renamed during the Porting Lib -> SFL migration.
+patch("net/p3pp3rf1y/sophisticatedcore/util/CapabilityHelper.java",
+      lambda t: t.replace("new MutableContainerItemContext(stack)",
+                          "new ItemStackContainerItemContext(stack)")
+                 .replace("import io.github.fabricators_of_create.porting_lib.transfer.MutableContainerItemContext;",
+                          "import com.github.salandora.sophisticatedfabriclib.transfer.api.v1.ItemStackContainerItemContext;"))
+
+# Text component codec replaces removed Component.Serializer.
+patch("net/p3pp3rf1y/sophisticatedcore/util/NBTHelper.java",
+      lambda t: t.replace("Component.Serializer.fromJson(t.getString(k).orElse(\"\"), registries)",
+                          "ComponentSerialization.CODEC.parse(RegistryOps.create(JsonOps.INSTANCE, registries), new JsonPrimitive(t.getString(k).orElse(\"\"))).result().orElse(Component.empty())")
+                 .replace("import net.minecraft.network.chat.Component;",
+                          "import net.minecraft.network.chat.Component;\nimport net.minecraft.network.chat.ComponentSerialization;\nimport net.minecraft.resources.RegistryOps;\nimport com.google.gson.JsonOps;\nimport com.google.gson.JsonPrimitive;"))
+
+# Recipe serializer covariance in 26.3.
+for rel in [
+    "net/p3pp3rf1y/sophisticatedcore/crafting/UpgradeClearRecipe.java",
+    "net/p3pp3rf1y/sophisticatedcore/crafting/UpgradeNextTierRecipe.java",
+]:
+    patch(rel, lambda t: t.replace("public RecipeSerializer<?> getSerializer()",
+                                   "public RecipeSerializer<? extends CustomRecipe> getSerializer()")
+                 if "extends CustomRecipe" in t else
+                 t.replace("public RecipeSerializer<?> getSerializer()",
+                           "public RecipeSerializer<? extends NormalCraftingRecipe> getSerializer()"))
+
+# CustomRecipe no longer takes CraftingBookCategory; dye color accessor changed.
+def patch_storage_dye(t):
+    t = t.replace("super(category);", "super();")
+    t = t.replace("dyeItem.getDyeColor()", "dyeItem.getDyeColor(stack)")
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/crafting/StorageDyeRecipeBase.java", patch_storage_dye)
+
+# RecipeOutput now keys recipes by ResourceKey<Recipe<?>>.
+def patch_holding_output(t):
+    t = t.replace("public void accept(Identifier id, Recipe<?> recipe, @Nullable AdvancementHolder advancement)",
+                  "public void accept(ResourceKey<Recipe<?>> id, Recipe<?> recipe, @Nullable AdvancementHolder advancement)")
+    if "import net.minecraft.resources.ResourceKey;" not in t:
+        t = t.replace("import net.minecraft.resources.Identifier;",
+                      "import net.minecraft.resources.Identifier;\nimport net.minecraft.resources.ResourceKey;")
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/crafting/HoldingRecipeOutput.java", patch_holding_output)
+
+# ItemStack persistence: ItemStack.parse was removed; use OPTIONAL_CODEC.
+def patch_sfl_item_handler(t):
+    t = t.replace(
+        "ItemStack.parse(registries, itemTag).ifPresent(stack -> stacks.set(slot, stack));",
+        "ItemStack.OPTIONAL_CODEC.parse(RegistryOps.create(NbtOps.INSTANCE, registries), itemTag).result().ifPresent(stack -> stacks.set(slot, stack));"
+    )
+    if "import net.minecraft.nbt.NbtOps;" not in t:
+        t = t.replace("import net.minecraft.nbt.CompoundTag;",
+                      "import net.minecraft.nbt.CompoundTag;\nimport net.minecraft.nbt.NbtOps;")
+    if "import net.minecraft.resources.RegistryOps;" not in t:
+        t = t.replace("import net.minecraft.core.HolderLookup;",
+                      "import net.minecraft.core.HolderLookup;\nimport net.minecraft.resources.RegistryOps;")
+    return t
+patch("com/github/salandora/sophisticatedfabriclib/transfer/api/v1/ItemStackHandler.java", patch_sfl_item_handler)
+
+print("Applied sixth MC 26.3 targeted cleanup pass.")
