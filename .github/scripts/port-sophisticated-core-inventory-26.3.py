@@ -2078,7 +2078,7 @@ patch("net/p3pp3rf1y/sophisticatedcore/util/NBTHelper.java",
       lambda t: t.replace("Component.Serializer.fromJson(t.getString(k).orElse(\"\"), registries)",
                           "ComponentSerialization.CODEC.parse(RegistryOps.create(JsonOps.INSTANCE, registries), new JsonPrimitive(t.getString(k).orElse(\"\"))).result().orElse(Component.empty())")
                  .replace("import net.minecraft.network.chat.Component;",
-                          "import net.minecraft.network.chat.Component;\nimport net.minecraft.network.chat.ComponentSerialization;\nimport net.minecraft.resources.RegistryOps;\nimport com.google.gson.JsonOps;\nimport com.google.gson.JsonPrimitive;"))
+                          "import net.minecraft.network.chat.Component;\nimport net.minecraft.network.chat.ComponentSerialization;\nimport net.minecraft.resources.RegistryOps;\nimport com.mojang.serialization.JsonOps;\nimport com.google.gson.JsonPrimitive;"))
 
 # Recipe serializer covariance in 26.3.
 for rel in [
