@@ -62,6 +62,7 @@ jobs:
             net.minecraft.world.entity.EntityType \
             net.minecraft.resources.ResourceKey \
             net.minecraft.data.recipes.RecipeOutput \
+            net.minecraft.data.worldgen.BootstrapContextAccess \
             net.minecraft.world.entity.EntityTypes \
             net.minecraft.world.item.DyeColor \
             net.minecraft.server.permissions.PermissionSet \
