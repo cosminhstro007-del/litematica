@@ -1,0 +1,31 @@
+name: Inspect MC26.3 APIs for Sophisticated
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - sophisticated-26.3-fabric-port
+    paths:
+      - .github/workflows/inspect-sophisticated-26.3-api.yml
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Prepare Minecraft 26.3 classes
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+          ./gradlew classes
+          jarfile=$(find .gradle/loom-cache/minecraftMaven -name '*.jar' | grep '26.3' | grep -E 'merged|minecraft' | head -n 1)
+          echo "JAR=$jarfile"
+          for cls in             net.minecraft.world.item.crafting.AbstractCookingRecipe             net.minecraft.world.item.crafting.Recipe             net.minecraft.world.item.Item             net.minecraft.world.item.ItemStack             net.minecraft.server.MinecraftServer             net.minecraft.world.entity.player.Inventory             net.minecraft.world.inventory.AbstractContainerMenu             net.minecraft.world.inventory.ContainerSynchronizer             net.minecraft.world.inventory.RemoteSlot             net.minecraft.world.level.block.entity.BlockEntity             net.minecraft.util.ProblemReporter             net.minecraft.world.level.storage.ValueInput             net.minecraft.world.level.storage.ValueOutput             net.minecraft.world.level.dimension.DimensionType             net.minecraft.world.item.BucketItem             net.fabricmc.fabric.api.event.registry.FabricRegistryBuilder; do
+              echo "===== $cls ====="
+              javap -p -classpath "$jarfile:$HOME/.gradle/caches/modules-2/files-2.1/net.fabricmc.fabric-api/" "$cls" || true
+          done
