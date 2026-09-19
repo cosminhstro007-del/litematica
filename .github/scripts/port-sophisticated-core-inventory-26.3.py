@@ -1566,3 +1566,191 @@ for rel in [
     p.write_text(txt)
 
 print("Applied 26.3 RemoteSlot access-widener and slot-icon type migration.")
+
+
+# Fourth MC 26.3 pass: NBT Optional API + ItemStack codec serialization.
+
+codec_helper = java_root / "net/p3pp3rf1y/sophisticatedcore/util/CodecHelper.java"
+if codec_helper.exists():
+    txt = codec_helper.read_text(errors="ignore")
+    txt = txt.replace("ItemStack.ITEM_NON_AIR_CODEC.fieldOf(\"id\").forGetter(ItemStack::getItemHolder)", "Item.CODEC_WITH_BOUND_COMPONENTS.fieldOf(\"id\").forGetter(ItemStack::typeHolder)")
+    txt = txt.replace("p_330103_ -> p_330103_.components.asPatch()", "ItemStack::getComponentsPatch")
+    imports = [
+        "import net.minecraft.core.HolderLookup;",
+        "import net.minecraft.nbt.CompoundTag;",
+        "import net.minecraft.nbt.NbtOps;",
+        "import net.minecraft.nbt.Tag;",
+        "import net.minecraft.resources.RegistryOps;",
+        "import net.minecraft.world.item.Item;",
+        "import java.util.Optional;",
+    ]
+    pkg_end = txt.find("\n\n", txt.find("package "))
+    for imp in imports:
+        if imp not in txt:
+            txt = txt[:pkg_end+2] + imp + "\n" + txt[pkg_end+2:]
+    if "encodeItemStack(HolderLookup.Provider" not in txt:
+        helper = """
+\tpublic static CompoundTag encodeItemStack(HolderLookup.Provider registries, ItemStack stack) {
+\t\tif (stack.isEmpty()) {
+\t\t\treturn new CompoundTag();
+\t\t}
+\t\treturn OVERSIZED_ITEM_STACK_CODEC
+\t\t\t\t.encodeStart(RegistryOps.create(NbtOps.INSTANCE, registries), stack)
+\t\t\t\t.result()
+\t\t\t\t.filter(CompoundTag.class::isInstance)
+\t\t\t\t.map(CompoundTag.class::cast)
+\t\t\t\t.orElseGet(CompoundTag::new);
+\t}
+
+\tpublic static Optional<ItemStack> decodeItemStackOptional(HolderLookup.Provider registries, Tag tag) {
+\t\tif (!(tag instanceof CompoundTag compound) || compound.isEmpty()) {
+\t\t\treturn Optional.empty();
+\t\t}
+\t\treturn OVERSIZED_ITEM_STACK_CODEC.parse(RegistryOps.create(NbtOps.INSTANCE, registries), compound).result();
+\t}
+
+\tpublic static ItemStack decodeItemStack(HolderLookup.Provider registries, Tag tag) {
+\t\treturn decodeItemStackOptional(registries, tag).orElse(ItemStack.EMPTY);
+\t}
+"""
+        txt = txt.replace("\n\tprivate CodecHelper() {}", helper + "\n\tprivate CodecHelper() {}")
+    codec_helper.write_text(txt)
+
+# CompoundTag getters return Optional in 26.3. Keep NBTHelper's public API unchanged.
+nbt_helper = java_root / "net/p3pp3rf1y/sophisticatedcore/util/NBTHelper.java"
+if nbt_helper.exists():
+    txt = nbt_helper.read_text(errors="ignore")
+    replacements = {
+        "return getTagValue(tag, key, CompoundTag::getInt);": "return tag.getInt(key);",
+        "return getTagValue(tag, key, CompoundTag::getIntArray);": "return tag.getIntArray(key);",
+        "return getTagValue(tag, key, CompoundTag::getBoolean);": "return tag.getBoolean(key);",
+        "return getTagValue(tag, key, CompoundTag::getCompound);": "return tag.getCompound(key);",
+        "return getTagValue(tag, key, CompoundTag::getLong);": "return tag.getLong(key);",
+        "return getTagValue(tag, key, CompoundTag::getString);": "return tag.getString(key);",
+        "return getTagValue(tag, key, (t, k) -> deserialize.apply(t.getString(k)));": "return tag.getString(key).map(deserialize);",
+        "return getTagValue(tag, key, (t, k) -> Component.Serializer.fromJson(t.getString(k), registries));": "return tag.getString(key).map(s -> Component.Serializer.fromJson(s, registries));",
+    }
+    for old,new in replacements.items():
+        txt = txt.replace(old,new)
+    old_collection = """\t\treturn getTagValue(tag, key, (c, n) -> c.getList(n, listType)).map(listNbt -> {
+\t\t\tC ret = initCollection.get();
+\t\t\tlistNbt.forEach(elementNbt -> getElement.apply(elementNbt).ifPresent(ret::add));
+\t\t\treturn ret;
+\t\t});
+"""
+    new_collection = """\t\treturn tag.getList(key).map(listNbt -> {
+\t\t\tC ret = initCollection.get();
+\t\t\tlistNbt.forEach(elementNbt -> getElement.apply(elementNbt).ifPresent(ret::add));
+\t\t\treturn ret;
+\t\t});
+"""
+    txt = txt.replace(old_collection,new_collection)
+    old_map = """\t\tCompoundTag mapNbt = tag.getCompound(key);
+
+\t\tMap<K, V> map = initMap.get();
+
+\t\tfor (String tagName : mapNbt.getAllKeys()) {
+\t\t\tgetValue.apply(tagName, mapNbt.get(tagName)).ifPresent(value -> map.put(getKey.apply(tagName), value));
+\t\t}
+
+\t\treturn Optional.of(map);
+"""
+    new_map = """\t\treturn tag.getCompound(key).map(mapNbt -> {
+\t\t\tMap<K, V> map = initMap.get();
+\t\t\tfor (String tagName : mapNbt.getAllKeys()) {
+\t\t\t\tTag valueTag = mapNbt.get(tagName);
+\t\t\t\tif (valueTag != null) {
+\t\t\t\t\tgetValue.apply(tagName, valueTag).ifPresent(value -> map.put(getKey.apply(tagName), value));
+\t\t\t\t}
+\t\t\t}
+\t\t\treturn map;
+\t\t});
+"""
+    txt = txt.replace(old_map,new_map)
+    nbt_helper.write_text(txt)
+
+# Render metadata: switch old direct NBT value getters to 26.3 fallback getters and central stack codec.
+render = java_root / "net/p3pp3rf1y/sophisticatedcore/renderdata/RenderInfo.java"
+if render.exists():
+    txt = render.read_text(errors="ignore")
+    txt = txt.replace("RegistryHelper.getRegistryAccess().map(upgradeItem::saveOptional).orElse(new CompoundTag())",
+                      "RegistryHelper.getRegistryAccess().map(registries -> CodecHelper.encodeItemStack(registries, upgradeItem)).orElse(new CompoundTag())")
+    txt = txt.replace("ItemStack.parseOptional(registryAccess, upgradeItemsTag.getCompound(i))",
+                      "CodecHelper.decodeItemStack(registryAccess, upgradeItemsTag.getCompound(i))")
+    txt = txt.replace("RegistryHelper.getRegistryAccess().map(item::saveOptional).orElse(new CompoundTag())",
+                      "RegistryHelper.getRegistryAccess().map(registries -> CodecHelper.encodeItemStack(registries, item)).orElse(new CompoundTag())")
+    txt = txt.replace("ItemStack.parseOptional(registryAccess, tag.getCompound(ITEM_TAG).orElseGet(CompoundTag::new))",
+                      "CodecHelper.decodeItemStack(registryAccess, tag.getCompoundOrEmpty(ITEM_TAG))")
+    txt = txt.replace("ItemStack.parseOptional(registryAccess, tag.getCompound(ITEM_TAG))",
+                      "CodecHelper.decodeItemStack(registryAccess, tag.getCompoundOrEmpty(ITEM_TAG))")
+    txt = txt.replace(".getCompound(UPGRADES_TAG)", ".getCompoundOrEmpty(UPGRADES_TAG)")
+    txt = txt.replace(".getCompound(ITEM_DISPLAY_TAG)", ".getCompoundOrEmpty(ITEM_DISPLAY_TAG)")
+    txt = txt.replace(".getCompound(TANK_INFO_TAG)", ".getCompoundOrEmpty(TANK_INFO_TAG)")
+    txt = txt.replace(".getList(UPGRADE_ITEMS_TAG, Tag.TAG_COMPOUND)", ".getListOrEmpty(UPGRADE_ITEMS_TAG)")
+    txt = txt.replace(".getList(TANKS_TAG, Tag.TAG_COMPOUND)", ".getListOrEmpty(TANKS_TAG)")
+    txt = txt.replace("tanks.getCompound(i)", "tanks.getCompound(i).orElseGet(CompoundTag::new)")
+    txt = txt.replace("upgradeItemsTag.getCompound(i)", "upgradeItemsTag.getCompound(i).orElseGet(CompoundTag::new)")
+    txt = txt.replace("tag.getString(TANK_POSITION_TAG).toUpperCase(Locale.ENGLISH)", "tag.getStringOr(TANK_POSITION_TAG, \"\").toUpperCase(Locale.ENGLISH)")
+    txt = txt.replace("tag.getString(TANK_POSITION_TAG).equals(tankPosition.getSerializedName())", "tag.getStringOr(TANK_POSITION_TAG, \"\").equals(tankPosition.getSerializedName())")
+    txt = txt.replace("tag.getTagType(INACCESSIBLE_SLOTS_TAG) == Tag.TAG_INT_ARRAY", "tag.get(INACCESSIBLE_SLOTS_TAG) instanceof IntArrayTag")
+    txt = txt.replace("tag.getIntArray(INACCESSIBLE_SLOTS_TAG)", "tag.getIntArray(INACCESSIBLE_SLOTS_TAG).orElseGet(() -> new int[0])")
+    txt = txt.replace("tag.getIntArray(INFINITE_SLOTS_TAG)", "tag.getIntArray(INFINITE_SLOTS_TAG).orElseGet(() -> new int[0])")
+    txt = txt.replace("tag.getIntArray(SLOT_COUNTS_TAG)", "tag.getIntArray(SLOT_COUNTS_TAG).orElseGet(() -> new int[0])")
+    txt = txt.replace("Optional.of(((FloatTag) t).getAsFloat())", "t.asFloat()")
+    txt = txt.replace("tag.getInt(ROTATION_TAG)", "tag.getIntOr(ROTATION_TAG, 0)")
+    txt = txt.replace("tag.getInt(SLOT_INDEX_TAG)", "tag.getIntOr(SLOT_INDEX_TAG, 0)")
+    txt = txt.replace("tag.getString(DISPLAY_SIDE_TAG)", "tag.getStringOr(DISPLAY_SIDE_TAG, \"\")")
+    if "import net.p3pp3rf1y.sophisticatedcore.util.CodecHelper;" not in txt:
+        txt = txt.replace("import net.p3pp3rf1y.sophisticatedcore.util.NBTHelper;\n",
+                          "import net.p3pp3rf1y.sophisticatedcore.util.CodecHelper;\nimport net.p3pp3rf1y.sophisticatedcore.util.NBTHelper;\n")
+    render.write_text(txt)
+
+# Simple float NBT getters.
+for rel,key in [
+    ("net/p3pp3rf1y/sophisticatedcore/upgrades/IRenderedTankUpgrade.java","FILL_RATIO_TAG"),
+    ("net/p3pp3rf1y/sophisticatedcore/upgrades/IRenderedBatteryUpgrade.java","CHARGE_RATIO_TAG"),
+]:
+    p=java_root/rel
+    if p.exists():
+        txt=p.read_text(errors="ignore")
+        txt=txt.replace(f"tag.getFloat({key})", f"tag.getFloatOr({key}, 0.0F)")
+        p.write_text(txt)
+
+# Inventory partition base indices now come through Optional<int[]>.
+partitioner = java_root / "net/p3pp3rf1y/sophisticatedcore/inventory/InventoryPartitioner.java"
+if partitioner.exists():
+    txt=partitioner.read_text(errors="ignore")
+    txt=txt.replace("baseIndexes = tag.getIntArray(BASE_INDEXES_TAG);", "baseIndexes = tag.getIntArray(BASE_INDEXES_TAG).orElseGet(() -> new int[0]);")
+    partitioner.write_text(txt)
+
+# Memory settings use the centralized oversized-safe ItemStack codec.
+memory = java_root / "net/p3pp3rf1y/sophisticatedcore/settings/memory/MemorySettingsCategory.java"
+if memory.exists():
+    txt=memory.read_text(errors="ignore")
+    txt=txt.replace("v.getAsString()", "v.asString().orElse(\"\")")
+    txt=txt.replace(
+        "RegistryHelper.getRegistryAccess().flatMap(registryAccess -> ItemStack.parse(registryAccess, tag))",
+        "RegistryHelper.getRegistryAccess().flatMap(registryAccess -> CodecHelper.decodeItemStackOptional(registryAccess, tag))"
+    )
+    txt=txt.replace(
+        "RegistryHelper.getRegistryAccess().map(registryAccess -> isk.stack().saveOptional(registryAccess)).orElse(new CompoundTag())",
+        "RegistryHelper.getRegistryAccess().map(registryAccess -> CodecHelper.encodeItemStack(registryAccess, isk.stack())).orElse(new CompoundTag())"
+    )
+    if "import net.p3pp3rf1y.sophisticatedcore.util.CodecHelper;" not in txt:
+        txt=txt.replace("import net.p3pp3rf1y.sophisticatedcore.util.NBTHelper;\n",
+                        "import net.p3pp3rf1y.sophisticatedcore.util.CodecHelper;\nimport net.p3pp3rf1y.sophisticatedcore.util.NBTHelper;\n")
+    memory.write_text(txt)
+
+# Colored shulker Items constants were removed; config stores IDs anyway, so keep canonical IDs directly.
+stack_cfg = java_root / "net/p3pp3rf1y/sophisticatedcore/upgrades/stack/StackUpgradeConfig.java"
+if stack_cfg.exists():
+    txt=stack_cfg.read_text(errors="ignore")
+    colors=["white","orange","magenta","light_blue","yellow","lime","pink","gray","light_gray","cyan","purple","blue","brown","green","red","black"]
+    for color in colors:
+        const=color.upper()+"_SHULKER_BOX"
+        txt=txt.replace(f"ret.add(RegistryHelper.getItemKey(Items.{const}).toString());", f"ret.add(\"minecraft:{color}_shulker_box\");")
+    txt=txt.replace("ret.add(RegistryHelper.getItemKey(Items.SHULKER_BOX).toString());", "ret.add(\"minecraft:shulker_box\");")
+    txt=txt.replace("BuiltInRegistries.ITEM.get(registryName)", "BuiltInRegistries.ITEM.getValue(registryName)")
+    stack_cfg.write_text(txt)
+
+print("Applied central 26.3 NBT Optional and ItemStack codec migration.")
