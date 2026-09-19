@@ -1390,3 +1390,120 @@ if chunk_mixin.exists():
     chunk_mixin.write_text(txt)
 
 print("Applied MC 26.3 cooking output/remainder, slot icon, RemoteSlot synchronizer, and chunk constructor fixes.")
+
+
+# Third MC 26.3 pass: fuel components, fluid environment APIs, generic entity containers, Fabric registry rename.
+
+def ensure_import(path: Path, anchor: str, imp: str):
+    if not path.exists():
+        return
+    txt = path.read_text(errors="ignore")
+    if imp not in txt:
+        txt = txt.replace(anchor, anchor + "\n" + imp)
+        path.write_text(txt)
+
+# Fabric API 26.1+ renamed FabricRegistryBuilder#createSimple -> create.
+soph_fluid = java_root / "com/github/salandora/sophisticatedfabriclib/fluid/SophisticatedFluid.java"
+if soph_fluid.exists():
+    txt = soph_fluid.read_text(errors="ignore")
+    txt = txt.replace("FabricRegistryBuilder.createSimple(FLUID_TYPES_KEY)", "FabricRegistryBuilder.create(FLUID_TYPES_KEY)")
+    soph_fluid.write_text(txt)
+
+# FlowingFluid#canConvertToSource now receives ServerLevel.
+base_flowing = java_root / "com/github/salandora/sophisticatedfabriclib/fluid/api/v1/BaseFlowingFluid.java"
+if base_flowing.exists():
+    txt = base_flowing.read_text(errors="ignore")
+    if "import net.minecraft.server.level.ServerLevel;" not in txt:
+        txt = txt.replace("import net.minecraft.core.Direction;\n", "import net.minecraft.core.Direction;\nimport net.minecraft.server.level.ServerLevel;\n")
+    txt = txt.replace("protected boolean canConvertToSource(Level level)", "protected boolean canConvertToSource(ServerLevel level)")
+    base_flowing.write_text(txt)
+
+# DimensionType#ultraWarm moved to EnvironmentAttributes.
+sfl_fluid_util = java_root / "com/github/salandora/sophisticatedfabriclib/fluid/api/v1/FluidUtil.java"
+if sfl_fluid_util.exists():
+    txt = sfl_fluid_util.read_text(errors="ignore")
+    if "import net.minecraft.world.attribute.EnvironmentAttributes;" not in txt:
+        txt = txt.replace("import net.minecraft.world.InteractionHand;\n", "import net.minecraft.world.InteractionHand;\nimport net.minecraft.world.attribute.EnvironmentAttributes;\n")
+    txt = txt.replace(
+        "level.dimensionType().ultraWarm()",
+        "level.environmentAttributes().getValue(EnvironmentAttributes.WATER_EVAPORATES, pos)"
+    )
+    sfl_fluid_util.write_text(txt)
+
+# 26.3 split the generic chest-boat type into wood-specific types.
+# Register a fallback for any vanilla Container entity instead of maintaining a brittle entity-type list.
+caps = java_root / "com/github/salandora/sophisticatedfabriclib/util/Capabilities.java"
+if caps.exists():
+    txt = caps.read_text(errors="ignore")
+    if "import net.minecraft.world.Container;" not in txt:
+        txt = txt.replace("import net.minecraft.core.Direction;\n", "import net.minecraft.core.Direction;\nimport net.minecraft.world.Container;\n")
+    txt = txt.replace("import java.util.List;\n", "")
+    old = """\t\tstatic {
+\t\t\tvar containerEntities = List.of(
+\t\t\t\t\tEntityType.CHEST_BOAT,
+\t\t\t\t\tEntityType.CHEST_MINECART,
+\t\t\t\t\tEntityType.HOPPER_MINECART);
+\t\t\tfor (var entityType : containerEntities) {
+\t\t\t\tENTITY.registerForType((entity, ctx) -> InvWrapper.of(entity), entityType);
+\t\t\t\tENTITY_AUTOMATION.registerForType((inventory, direction) -> InvWrapper.of(inventory), entityType);
+\t\t\t}
+
+\t\t\tENTITY.registerForType((player, ctx) -> PlayerInvWrapper.of(player), EntityType.PLAYER);
+"""
+    new = """\t\tstatic {
+\t\t\tENTITY.registerFallback((entity, ctx) -> entity instanceof Container container ? InvWrapper.of(container) : null);
+\t\t\tENTITY_AUTOMATION.registerFallback((entity, direction) -> entity instanceof Container container ? InvWrapper.of(container) : null);
+
+\t\t\tENTITY.registerForType((player, ctx) -> PlayerInvWrapper.of(player), EntityType.PLAYER);
+"""
+    txt = txt.replace(old, new)
+    caps.write_text(txt)
+
+# FuelRegistry was replaced by data-component backed cooking fuel values.
+# Use the same vanilla 26.3 ResolvableInt path; null loot context is valid for constant vanilla fuel providers.
+for rel in [
+    "net/p3pp3rf1y/sophisticatedcore/upgrades/cooking/CookingLogic.java",
+    "net/p3pp3rf1y/sophisticatedcore/extensions/item/SophisticatedItem.java",
+    "net/p3pp3rf1y/sophisticatedcore/extensions/item/SophisticatedItemStack.java",
+]:
+    p = java_root / rel
+    if not p.exists():
+        continue
+    txt = p.read_text(errors="ignore")
+    txt = txt.replace("import net.fabricmc.fabric.api.registry.FuelRegistry;\n", "")
+    imports = [
+        "import net.minecraft.core.component.DataComponents;",
+        "import net.minecraft.world.item.component.CookingFuel;",
+        "import net.minecraft.world.level.storage.loot.providers.number.ints.ResolvableInt;",
+    ]
+    pkg_end = txt.find("\n\n", txt.find("package "))
+    for imp in imports:
+        if imp not in txt:
+            txt = txt[:pkg_end+2] + imp + "\n" + txt[pkg_end+2:]
+    if rel.endswith("CookingLogic.java"):
+        txt = txt.replace(
+            "return (int) (Objects.requireNonNullElse(FuelRegistry.INSTANCE.get(fuel.getItem()), 0) * burnTimeModifier);",
+            "return (int) (ResolvableInt.getFromItem(fuel, DataComponents.COOKING_FUEL, CookingFuel::burnTime, null, 0) * burnTimeModifier);"
+        )
+        txt = txt.replace(
+            "return server == null ? 0 : (int) (server.fuelValues().burnDuration(fuel) * burnTimeModifier);",
+            "return (int) (ResolvableInt.getFromItem(fuel, DataComponents.COOKING_FUEL, CookingFuel::burnTime, null, 0) * burnTimeModifier);"
+        )
+    elif rel.endswith("SophisticatedItem.java"):
+        txt = txt.replace(
+            """\t\tInteger burnTime = FuelRegistry.INSTANCE.get(stack.getItem());
+\t\treturn burnTime != null ? burnTime : 0;""",
+            """\t\treturn ResolvableInt.getFromItem(stack, DataComponents.COOKING_FUEL, CookingFuel::burnTime, null, 0);"""
+        )
+        txt = txt.replace(
+            "return server == null ? 0 : server.fuelValues().burnDuration(stack);",
+            "return ResolvableInt.getFromItem(stack, DataComponents.COOKING_FUEL, CookingFuel::burnTime, null, 0);"
+        )
+    elif rel.endswith("SophisticatedItemStack.java"):
+        txt = txt.replace(
+            "return server == null ? 0 : server.fuelValues().burnDuration(self());",
+            "return ResolvableInt.getFromItem(self(), DataComponents.COOKING_FUEL, CookingFuel::burnTime, null, 0);"
+        )
+    p.write_text(txt)
+
+print("Applied MC 26.3 fuel-component, environment attribute, Fabric registry and entity-container fixes.")
