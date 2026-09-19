@@ -1240,3 +1240,153 @@ if item_stack_mixin.exists():
     item_stack_mixin.write_text(txt)
 
 print("Applied confirmed MC 26.3 cooking, selected-slot, bucket, fluid lookup, and component generic fixes.")
+
+
+# Second confirmed MC 26.3 compatibility pass.
+
+# Cooking recipes now expose output via assemble(SingleRecipeInput), and item remainders are ItemStackTemplate.
+cooking = java_root / "net/p3pp3rf1y/sophisticatedcore/upgrades/cooking/CookingLogic.java"
+if cooking.exists():
+    txt = cooking.read_text(errors="ignore")
+    if "import net.minecraft.world.item.crafting.SingleRecipeInput;" not in txt:
+        txt = txt.replace(
+            "import net.minecraft.world.item.crafting.RecipeType;\n",
+            "import net.minecraft.world.item.crafting.RecipeType;\nimport net.minecraft.world.item.crafting.SingleRecipeInput;\n"
+        )
+    txt = txt.replace("private void smelt(Recipe<?> recipe, Level level)", "private void smelt(T recipe, Level level)")
+    txt = txt.replace("protected boolean canSmelt(Recipe<?> cookingRecipe, Level level)", "protected boolean canSmelt(T cookingRecipe, Level level)")
+    txt = txt.replace(
+        "ItemStack recipeOutput = recipe.getResultItem(level.registryAccess());",
+        "ItemStack recipeOutput = recipe.assemble(new SingleRecipeInput(input));"
+    )
+    txt = txt.replace(
+        "ItemStack recipeOutput = cookingRecipe.getResultItem(level.registryAccess());",
+        "ItemStack recipeOutput = cookingRecipe.assemble(new SingleRecipeInput(getCookInput()));"
+    )
+    old = """\t\t\t\tif (fuel.getItem().hasCraftingRemainingItem()) {
+\t\t\t\t\tsetFuelWithoutValidation(fuel.getRecipeRemainder());
+\t\t\t\t} else if (!fuel.isEmpty()) {
+\t\t\t\t\tfuel.shrink(1);
+\t\t\t\t\tsetFuel(fuel);
+\t\t\t\t\tif (fuel.isEmpty()) {
+\t\t\t\t\t\tsetFuel(fuel.getRecipeRemainder());
+\t\t\t\t\t}
+\t\t\t\t}
+"""
+    new = """\t\t\t\tvar craftingRemainder = fuel.getItem().getCraftingRemainder();
+\t\t\t\tif (craftingRemainder != null) {
+\t\t\t\t\tsetFuelWithoutValidation(craftingRemainder.create());
+\t\t\t\t} else if (!fuel.isEmpty()) {
+\t\t\t\t\tfuel.shrink(1);
+\t\t\t\t\tsetFuel(fuel);
+\t\t\t\t}
+"""
+    txt = txt.replace(old, new)
+    cooking.write_text(txt)
+
+# Fix accidental global isClientSide field rewrite in StorageInventorySlot.
+storage_slot = java_root / "net/p3pp3rf1y/sophisticatedcore/common/gui/StorageInventorySlot.java"
+if storage_slot.exists():
+    txt = storage_slot.read_text(errors="ignore")
+    txt = txt.replace("this.isClientSide() = isClientSide;", "this.isClientSide = isClientSide;")
+    storage_slot.write_text(txt)
+
+# Slot#getNoItemIcon now returns a single Identifier instead of atlas/texture Pair.
+storage_menu = java_root / "net/p3pp3rf1y/sophisticatedcore/common/gui/StorageContainerMenuBase.java"
+if storage_menu.exists():
+    txt = storage_menu.read_text(errors="ignore")
+    txt = txt.replace(
+        "public static final Pair<Identifier, Identifier> INACCESSIBLE_SLOT_BACKGROUND = SophisticatedCore.getRL(\"item/inaccessible_slot\");",
+        "public static final Identifier INACCESSIBLE_SLOT_BACKGROUND = SophisticatedCore.getRL(\"item/inaccessible_slot\");"
+    )
+    txt = txt.replace(
+        "public static final Pair<ResourceLocation, ResourceLocation> INACCESSIBLE_SLOT_BACKGROUND = new Pair<>(InventoryMenu.BLOCK_ATLAS, SophisticatedCore.getRL(\"item/inaccessible_slot\"));",
+        "public static final Identifier INACCESSIBLE_SLOT_BACKGROUND = SophisticatedCore.getRL(\"item/inaccessible_slot\");"
+    )
+    txt = txt.replace("public Pair<Identifier, Identifier> getNoItemIcon()", "public Identifier getNoItemIcon()")
+    txt = txt.replace("public Pair<ResourceLocation, ResourceLocation> getNoItemIcon()", "public Identifier getNoItemIcon()")
+    storage_menu.write_text(txt)
+
+# Vanilla 26.x ContainerSynchronizer now owns RemoteSlot instances. Mirror vanilla's component hashing.
+sync = java_root / "net/p3pp3rf1y/sophisticatedcore/common/gui/HighStackCountSynchronizer.java"
+if sync.exists():
+    txt = sync.read_text(errors="ignore")
+    txt = txt.replace("import net.minecraft.core.NonNullList;\n", "")
+    needed = [
+        "import com.google.common.cache.CacheBuilder;",
+        "import com.google.common.cache.CacheLoader;",
+        "import com.google.common.cache.LoadingCache;",
+        "import com.google.common.hash.HashCode;",
+        "import com.mojang.serialization.DynamicOps;",
+        "import net.minecraft.core.component.TypedDataComponent;",
+        "import net.minecraft.util.HashOps;",
+        "import net.minecraft.world.inventory.RemoteSlot;",
+        "import java.util.List;",
+    ]
+    marker = "package net.p3pp3rf1y.sophisticatedcore.common.gui;\n"
+    for imp in needed:
+        if imp not in txt:
+            txt = txt.replace(marker, marker + "\n" + imp + "\n")
+    txt = txt.replace(
+        "private final ServerPlayer player;",
+        """private final ServerPlayer player;
+\tprivate final LoadingCache<TypedDataComponent<?>, Integer> componentHashCache;"""
+    )
+    txt = txt.replace(
+        """\tpublic HighStackCountSynchronizer(ServerPlayer player) {
+\t\tthis.player = player;
+\t}
+""",
+        """\tpublic HighStackCountSynchronizer(ServerPlayer player) {
+\t\tthis.player = player;
+\t\tthis.componentHashCache = CacheBuilder.newBuilder().maximumSize(256L).build(
+\t\t\t\tnew CacheLoader<TypedDataComponent<?>, Integer>() {
+\t\t\t\t\tprivate final DynamicOps<HashCode> registryHashOps =
+\t\t\t\t\t\t\tHighStackCountSynchronizer.this.player.registryAccess().createSerializationContext(HashOps.CRC32C_INSTANCE);
+
+\t\t\t\t\t@Override
+\t\t\t\t\tpublic Integer load(TypedDataComponent<?> component) {
+\t\t\t\t\t\treturn component.encodeValue(this.registryHashOps)
+\t\t\t\t\t\t\t\t.getOrThrow(msg -> new IllegalArgumentException("Failed to hash " + component + ": " + msg))
+\t\t\t\t\t\t\t\t.asInt();
+\t\t\t\t\t}
+\t\t\t\t});
+\t}
+"""
+    )
+    txt = txt.replace(
+        "public void sendInitialData(AbstractContainerMenu containerMenu, NonNullList<ItemStack> stacks, ItemStack carriedStack, int[] dataSlots)",
+        "public void sendInitialData(AbstractContainerMenu containerMenu, List<ItemStack> stacks, ItemStack carriedStack, int[] dataSlots)"
+    )
+    if "public RemoteSlot createSlot()" not in txt:
+        insert = """
+\t@Override
+\tpublic RemoteSlot createSlot() {
+\t\treturn new RemoteSlot.Synchronized(componentHashCache::getUnchecked);
+\t}
+"""
+        txt = txt.replace("\n}", insert + "\n}")
+    sync.write_text(txt)
+
+# ChunkAccess constructor now takes PalettedContainerFactory instead of biome registry.
+chunk_mixin = java_root / "net/p3pp3rf1y/sophisticatedcore/mixin/common/LevelChunkMixin.java"
+if chunk_mixin.exists():
+    txt = chunk_mixin.read_text(errors="ignore")
+    txt = txt.replace("import net.minecraft.core.Registry;\n", "")
+    txt = txt.replace("import net.minecraft.world.level.biome.Biome;\n", "")
+    if "import net.minecraft.world.level.chunk.PalettedContainerFactory;" not in txt:
+        txt = txt.replace(
+            "import net.minecraft.world.level.chunk.LevelChunkSection;\n",
+            "import net.minecraft.world.level.chunk.LevelChunkSection;\nimport net.minecraft.world.level.chunk.PalettedContainerFactory;\n"
+        )
+    txt = txt.replace(
+        "Registry<Biome> biomeRegistry, long inhabitedTime",
+        "PalettedContainerFactory palettedContainerFactory, long inhabitedTime"
+    )
+    txt = txt.replace(
+        "super(chunkPos, upgradeData, levelHeightAccessor, biomeRegistry, inhabitedTime, sections, blendingData);",
+        "super(chunkPos, upgradeData, levelHeightAccessor, palettedContainerFactory, inhabitedTime, sections, blendingData);"
+    )
+    chunk_mixin.write_text(txt)
+
+print("Applied MC 26.3 cooking output/remainder, slot icon, RemoteSlot synchronizer, and chunk constructor fixes.")
