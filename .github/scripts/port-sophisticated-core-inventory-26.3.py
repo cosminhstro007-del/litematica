@@ -2124,3 +2124,283 @@ def patch_sfl_item_handler(t):
 patch("com/github/salandora/sophisticatedfabriclib/transfer/api/v1/ItemStackHandler.java", patch_sfl_item_handler)
 
 print("Applied sixth MC 26.3 targeted cleanup pass.")
+
+
+# Seventh MC 26.3 cleanup pass: recipe manager, tooltips, save API, and common-pass client stubs.
+
+# RenderInfo exact leftovers after previous generic transformations.
+def patch_render_exact(t):
+    t = t.replace(
+        "ItemStack.parseOptional(registryAccess, upgradeItemsTag.getCompound(i).orElseGet(CompoundTag::new))",
+        "CodecHelper.decodeItemStack(registryAccess, upgradeItemsTag.getCompound(i).orElseGet(CompoundTag::new))"
+    )
+    t = t.replace(
+        "tank.getString(TANK_POSITION_TAG).toUpperCase(Locale.ENGLISH)",
+        "tank.getStringOr(TANK_POSITION_TAG, \"\").toUpperCase(Locale.ENGLISH)"
+    )
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/renderdata/RenderInfo.java", patch_render_exact)
+
+# displayClientMessage(Component, false) became sendSystemMessage(Component).
+patch("net/p3pp3rf1y/sophisticatedcore/common/gui/TemplatePersistanceContainer.java",
+      lambda t: re.sub(r'getPlayer\(\)\.displayClientMessage\((.*?),\s*false\);',
+                       r'getPlayer().sendSystemMessage(\1);', t, flags=re.S)
+                 .replace("serverPlayer.serverLevel()", "serverPlayer.level()"))
+
+# SNBT parser rename.
+patch("net/p3pp3rf1y/sophisticatedcore/settings/DatapackSettingsTemplateManager.java",
+      lambda t: t.replace("TagParser.parseTag(fileContents)", "TagParser.parseCompoundFully(fileContents)"))
+
+# ContainerItemContext factory is static in 26.x SFL shim.
+patch("net/p3pp3rf1y/sophisticatedcore/util/CapabilityHelper.java",
+      lambda t: t.replace("new ItemStackContainerItemContext(stack)",
+                          "ItemStackContainerItemContext.ofSingleStack(stack)"))
+
+# RecipeAccess is now intentionally tiny; RecipeManager owns lookup/query behavior.
+def patch_recipe_helper(t):
+    t = t.replace(
+        "return getLevel().map(w -> w.recipeAccess().getRecipesFor(recipeType, inventory, w)).orElse(Collections.emptyList());",
+        "return getLevel().map(w -> getMatchingRecipes(w, recipeType, inventory)).orElse(Collections.emptyList());"
+    )
+    t = t.replace(
+        "return level.recipeAccess().getRecipeFor(recipeType, inventory, level, recipeId);",
+        "return recipeId == null ? level.getRecipeManager().getRecipeFor(recipeType, inventory, level) : level.getRecipeManager().getRecipeFor(recipeType, inventory, level, ResourceKey.create(Registries.RECIPE, recipeId));"
+    )
+    t = t.replace(
+        "return level.recipeAccess().getRecipesFor(recipeType, inventory, level);",
+        "return getMatchingRecipes(level, recipeType, inventory);"
+    )
+    anchor = "\tpublic enum CompactingShape {"
+    helper = """
+\t@SuppressWarnings(\"unchecked\")
+\tprivate static <I extends RecipeInput, T extends Recipe<I>> List<RecipeHolder<T>> getMatchingRecipes(Level level, RecipeType<T> recipeType, I inventory) {
+\t\treturn level.getRecipeManager().getRecipes().stream()
+\t\t\t\t.filter(holder -> holder.value().getType() == recipeType)
+\t\t\t\t.map(holder -> (RecipeHolder<T>) holder)
+\t\t\t\t.filter(holder -> holder.value().matches(inventory, level))
+\t\t\t\t.toList();
+\t}
+
+"""
+    if anchor in t and "getMatchingRecipes(Level level" not in t:
+        t = t.replace(anchor, helper + anchor)
+    if "import net.minecraft.core.registries.Registries;" not in t:
+        t = t.replace("import net.minecraft.core.registries.BuiltInRegistries;",
+                      "import net.minecraft.core.registries.BuiltInRegistries;\nimport net.minecraft.core.registries.Registries;")
+    if "import net.minecraft.resources.ResourceKey;" not in t:
+        t = t.replace("import net.minecraft.resources.Identifier;",
+                      "import net.minecraft.resources.Identifier;\nimport net.minecraft.resources.ResourceKey;")
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/util/RecipeHelper.java", patch_recipe_helper)
+
+# CustomRecipe no longer has canCraftInDimensions and serializer registry is wildcard-typed.
+def patch_upgrade_clear(t):
+    t = t.replace("\n    @Override\n    public boolean canCraftInDimensions", "\n    public boolean canCraftInDimensions")
+    t = t.replace("\n\t@Override\n\tpublic boolean canCraftInDimensions", "\n\tpublic boolean canCraftInDimensions")
+    t = t.replace(
+        "return ModRecipes.UPGRADE_CLEAR_SERIALIZER.get();",
+        "return (RecipeSerializer<? extends CustomRecipe>) (RecipeSerializer<?>) ModRecipes.UPGRADE_CLEAR_SERIALIZER.get();"
+    )
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/crafting/UpgradeClearRecipe.java", patch_upgrade_clear)
+
+# Same for ShapedRecipe wrapper: vanilla requires the exact generic serializer type.
+def patch_upgrade_next(t):
+    t = t.replace("public RecipeSerializer<? extends ShapedRecipe> getSerializer()",
+                  "public RecipeSerializer<ShapedRecipe> getSerializer()")
+    t = t.replace(
+        "return ModRecipes.UPGRADE_NEXT_TIER_SERIALIZER.get();",
+        "return (RecipeSerializer<ShapedRecipe>) (RecipeSerializer<?>) ModRecipes.UPGRADE_NEXT_TIER_SERIALIZER.get();"
+    )
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/crafting/UpgradeNextTierRecipe.java", patch_upgrade_next)
+
+# CustomRecipe removed canCraftInDimensions. Standard dyes are already covered by c:*_dyes tags,
+# so the old DyeItem#getDyeColor shortcut is unnecessary on 26.3.
+def patch_storage_dye_263(t):
+    t = t.replace("\n\t@Override\n\tpublic boolean canCraftInDimensions", "\n\tpublic boolean canCraftInDimensions")
+    t = re.sub(
+        r'\n\t\tItem item = stack\.getItem\(\);\n\t\tif \(item instanceof DyeItem dyeItem\) \{\n\t\t\treturn dyeItem\.getDyeColor\([^;]*\);\n\t\t\}\n',
+        '\n',
+        t
+    )
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/crafting/StorageDyeRecipeBase.java", patch_storage_dye_263)
+
+# RecipeOutput now receives ResourceKey<Recipe<?>>.
+def patch_recipe_output(t):
+    t = t.replace("import net.minecraft.resources.Identifier;",
+                  "import net.minecraft.resources.ResourceKey;")
+    t = t.replace("public void accept(Identifier id, Recipe<?> recipe",
+                  "public void accept(ResourceKey<Recipe<?>> id, Recipe<?> recipe")
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/crafting/HoldingRecipeOutput.java", patch_recipe_output)
+
+# Tooltip API became consumer-based.
+def patch_upgrade_tooltip(t):
+    old = """\t@Override
+\tpublic void appendHoverText(ItemStack stack, Item.TooltipContext context, List<Component> tooltip, TooltipFlag flagIn) {
+\t\ttooltip.addAll(TranslationHelper.INSTANCE.getTranslatedLines(stack.getItem().getDescriptionId() + TranslationHelper.TOOLTIP_SUFFIX, null, ChatFormatting.DARK_GRAY));
+\t}"""
+    new = """\t@Override
+\tpublic void appendHoverText(ItemStack stack, Item.TooltipContext context, TooltipDisplay display, Consumer<Component> tooltip, TooltipFlag flagIn) {
+\t\tTranslationHelper.INSTANCE.getTranslatedLines(stack.getItem().getDescriptionId() + TranslationHelper.TOOLTIP_SUFFIX, null, ChatFormatting.DARK_GRAY).forEach(tooltip);
+\t}"""
+    t = t.replace(old, new)
+    if "import net.minecraft.world.item.component.TooltipDisplay;" not in t:
+        t = t.replace("import net.minecraft.world.item.TooltipFlag;",
+                      "import net.minecraft.world.item.TooltipFlag;\nimport net.minecraft.world.item.component.TooltipDisplay;")
+    if "import java.util.function.Consumer;" not in t:
+        t = t.replace("import java.util.List;", "import java.util.List;\nimport java.util.function.Consumer;")
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/upgrades/UpgradeItemBase.java", patch_upgrade_tooltip)
+
+# RecipeHolder id is now ResourceKey<Recipe<?>>.
+patch("net/p3pp3rf1y/sophisticatedcore/upgrades/stonecutter/StonecutterRecipeContainer.java",
+      lambda t: t.replace("recipes.get(recipeIndex).id())",
+                          "recipes.get(recipeIndex).id().identifier())"))
+
+# 26.3 StackedContents API changed. This override no longer exists; remove the obsolete helper.
+def remove_method_by_signature(text, signature):
+    idx = text.find(signature)
+    if idx < 0:
+        return text
+    start = text.rfind("\n", 0, idx) + 1
+    # include a directly preceding @Override line
+    prev_start = text.rfind("\n", 0, max(0, start-1)) + 1
+    if text[prev_start:start].strip() == "@Override":
+        start = prev_start
+    brace = text.find("{", idx)
+    if brace < 0:
+        return text
+    depth = 0
+    end = brace
+    while end < len(text):
+        if text[end] == "{":
+            depth += 1
+        elif text[end] == "}":
+            depth -= 1
+            if depth == 0:
+                end += 1
+                break
+        end += 1
+    return text[:start] + text[end:]
+
+patch("net/p3pp3rf1y/sophisticatedcore/upgrades/crafting/CraftingItemHandler.java",
+      lambda t: remove_method_by_signature(t, "public void fillStackedContents("))
+
+# Crafting recipe byKey now takes ResourceKey<Recipe<?>> and lives on RecipeManager.
+def patch_crafting_container(t):
+    t = t.replace(
+        "player.level().recipeAccess().byKey(recipeId)",
+        "player.level().getRecipeManager().byKey(ResourceKey.create(Registries.RECIPE, recipeId))"
+    )
+    if "import net.minecraft.core.registries.Registries;" not in t:
+        t = t.replace("import net.minecraft.core.", "import net.minecraft.core.registries.Registries;\nimport net.minecraft.core.", 1)
+    if "import net.minecraft.resources.ResourceKey;" not in t:
+        t = t.replace("import net.minecraft.resources.Identifier;",
+                      "import net.minecraft.resources.Identifier;\nimport net.minecraft.resources.ResourceKey;")
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/upgrades/crafting/CraftingUpgradeContainer.java", patch_crafting_container)
+
+# BlockEntity save/load switched to ValueOutput/ValueInput. Keep the existing CompoundTag saveData()
+# helper for update packets, and only migrate persistence hooks.
+def patch_controller_save(t):
+    old_save = """\t@Override
+\tprotected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+\t\tsuper.saveAdditional(tag, registries);
+
+\t\tsaveData(tag);
+\t}"""
+    new_save = """\t@Override
+\tprotected void saveAdditional(ValueOutput output) {
+\t\tsuper.saveAdditional(output);
+\t\toutput.store(\"storagePositions\", Codec.LONG.listOf(), storagePositions.stream().map(BlockPos::asLong).toList());
+\t\toutput.store(\"connectingBlocks\", Codec.LONG.listOf(), connectingBlocks.stream().map(BlockPos::asLong).toList());
+\t\toutput.store(\"nonConnectingBlocks\", Codec.LONG.listOf(), nonConnectingBlocks.stream().map(BlockPos::asLong).toList());
+\t\toutput.store(\"linkedBlocks\", Codec.LONG.listOf(), linkedBlocks.stream().map(BlockPos::asLong).toList());
+\t\toutput.store(\"baseIndexes\", Codec.INT.listOf(), baseIndexes);
+\t\toutput.putInt(\"totalSlots\", totalSlots);
+\t}"""
+    old_load = """\t@Override
+\tpublic void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+\t\tsuper.loadAdditional(tag, registries);
+
+\t\tstoragePositions = NBTHelper.getCollection(tag, \"storagePositions\", Tag.TAG_LONG, t -> Optional.of(BlockPos.of(((LongTag) t).getAsLong())), ArrayList::new).orElseGet(ArrayList::new);
+\t\tconnectingBlocks = NBTHelper.getCollection(tag, \"connectingBlocks\", Tag.TAG_LONG, t -> Optional.of(BlockPos.of(((LongTag) t).getAsLong())), LinkedHashSet::new).orElseGet(LinkedHashSet::new);
+\t\tnonConnectingBlocks = NBTHelper.getCollection(tag, \"nonConnectingBlocks\", Tag.TAG_LONG, t -> Optional.of(BlockPos.of(((LongTag) t).getAsLong())), LinkedHashSet::new).orElseGet(LinkedHashSet::new);
+\t\tbaseIndexes = NBTHelper.getCollection(tag, \"baseIndexes\", Tag.TAG_INT, t -> Optional.of(((IntTag) t).getAsInt()), ArrayList::new).orElseGet(ArrayList::new);
+\t\ttotalSlots = tag.getInt(\"totalSlots\");
+\t\tlinkedBlocks = NBTHelper.getCollection(tag, \"linkedBlocks\", Tag.TAG_LONG, t -> Optional.of(BlockPos.of(((LongTag) t).getAsLong())), LinkedHashSet::new).orElseGet(LinkedHashSet::new);
+\t}"""
+    new_load = """\t@Override
+\tprotected void loadAdditional(ValueInput input) {
+\t\tsuper.loadAdditional(input);
+\t\tstoragePositions = input.read(\"storagePositions\", Codec.LONG.listOf()).orElse(List.of()).stream().map(BlockPos::of).collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+\t\tconnectingBlocks = input.read(\"connectingBlocks\", Codec.LONG.listOf()).orElse(List.of()).stream().map(BlockPos::of).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+\t\tnonConnectingBlocks = input.read(\"nonConnectingBlocks\", Codec.LONG.listOf()).orElse(List.of()).stream().map(BlockPos::of).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+\t\tbaseIndexes = new ArrayList<>(input.read(\"baseIndexes\", Codec.INT.listOf()).orElse(List.of()));
+\t\ttotalSlots = input.getIntOr(\"totalSlots\", 0);
+\t\tlinkedBlocks = input.read(\"linkedBlocks\", Codec.LONG.listOf()).orElse(List.of()).stream().map(BlockPos::of).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+\t}"""
+    t = t.replace(old_save, new_save).replace(old_load, new_load)
+    if "import com.mojang.serialization.Codec;" not in t:
+        t = t.replace("package net.p3pp3rf1y.sophisticatedcore.controller;",
+                      "package net.p3pp3rf1y.sophisticatedcore.controller;\n\nimport com.mojang.serialization.Codec;")
+    if "import net.minecraft.world.level.storage.ValueInput;" not in t:
+        t = t.replace("import net.minecraft.world.level.block.state.BlockState;",
+                      "import net.minecraft.world.level.block.state.BlockState;\nimport net.minecraft.world.level.storage.ValueInput;\nimport net.minecraft.world.level.storage.ValueOutput;")
+    return t
+patch("net/p3pp3rf1y/sophisticatedcore/controller/ControllerBlockEntityBase.java", patch_controller_save)
+
+# Vanilla 26.3 made doClick private/final. Keep the custom pre-handling in clicked() and
+# fall back to vanilla's click engine for the base path.
+patch("net/p3pp3rf1y/sophisticatedcore/common/gui/StorageContainerMenuBase.java",
+      lambda t: remove_method_by_signature(t, "protected void doClick("))
+
+# Common-pass stubs for client-only helpers referenced by payload/container classes.
+sound_stub = java_root / "net/p3pp3rf1y/sophisticatedcore/upgrades/jukebox/StorageSoundHandler.java"
+sound_stub.parent.mkdir(parents=True, exist_ok=True)
+if not sound_stub.exists():
+    sound_stub.write_text("""package net.p3pp3rf1y.sophisticatedcore.upgrades.jukebox;
+import net.minecraft.core.BlockPos;
+import net.minecraft.sounds.SoundEvent;
+import java.util.UUID;
+public final class StorageSoundHandler {
+    private StorageSoundHandler() {}
+    public static void stopStorageSound(UUID id) {}
+    public static void playStorageSound(SoundEvent sound, UUID id, BlockPos pos) {}
+    public static void playStorageSound(SoundEvent sound, UUID id, int entityId) {}
+}
+""")
+
+# TankUpgradeContainer is common logic but imports a tiny client marker interface. Restore it after
+# the generic client-pruning pass with a common-safe marker stub.
+nameable = java_root / "net/p3pp3rf1y/sophisticatedcore/client/gui/INameableEmptySlot.java"
+nameable.parent.mkdir(parents=True, exist_ok=True)
+if not nameable.exists():
+    nameable.write_text("""package net.p3pp3rf1y.sophisticatedcore.client.gui;
+import net.minecraft.network.chat.Component;
+public interface INameableEmptySlot {
+    boolean hasEmptyTooltip();
+    Component getEmptyTooltip();
+}
+""")
+tank_src = Path("core-src/.git")  # marker only; source checkout remains available through git worktree
+# If the generic pruning removed TankUpgradeContainer, restore it from git and then re-apply global import rewrites.
+tank = java_root / "net/p3pp3rf1y/sophisticatedcore/upgrades/tank/TankUpgradeContainer.java"
+if not tank.exists():
+    import subprocess
+    raw = subprocess.check_output(
+        ["git", "-C", "core-src", "show", "HEAD:src/main/java/net/p3pp3rf1y/sophisticatedcore/upgrades/tank/TankUpgradeContainer.java"],
+        text=True
+    )
+    raw = raw.replace("net.minecraft.resources.ResourceLocation", "net.minecraft.resources.Identifier")
+    raw = raw.replace("ResourceLocation", "Identifier")
+    raw = raw.replace("io.github.fabricators_of_create.porting_lib.fluids.FluidStack",
+                      "com.github.salandora.sophisticatedfabriclib.fluid.api.v1.FluidStack")
+    raw = raw.replace("io.github.fabricators_of_create.porting_lib.transfer.item.SlottedStackStorage",
+                      "com.github.salandora.sophisticatedfabriclib.transfer.api.v1.SlottedStackStorage")
+    tank.write_text(raw)
+
+print("Applied seventh MC 26.3 targeted cleanup pass.")
