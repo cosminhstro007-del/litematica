@@ -48,7 +48,20 @@ jobs:
             net.minecraft.world.level.storage.ValueInput \
             net.minecraft.world.level.storage.ValueOutput \
             net.minecraft.world.level.dimension.DimensionType \
-            net.minecraft.world.item.BucketItem; do
+            net.minecraft.world.item.BucketItem \
+            net.minecraft.world.item.crafting.RecipeAccess \
+            net.minecraft.world.item.crafting.RecipeManager \
+            net.minecraft.world.item.crafting.CustomRecipe \
+            net.minecraft.world.item.crafting.ShapedRecipe \
+            net.minecraft.world.item.crafting.RecipeSerializer \
+            net.minecraft.server.level.ServerPlayer \
+            net.minecraft.world.entity.player.Player \
+            net.minecraft.nbt.TagParser \
+            net.minecraft.world.item.DyeItem \
+            net.minecraft.world.entity.player.StackedContents \
+            net.minecraft.world.entity.EntityType \
+            net.minecraft.resources.ResourceKey \
+            net.minecraft.data.recipes.RecipeOutput; do
               echo "===== $cls ====="
               javap -p -classpath "$jarfile" "$cls" || true
           done
