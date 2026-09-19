@@ -363,7 +363,7 @@ jobs:
         working-directory: core-src
         run: |
           chmod +x ./gradlew
-          ./gradlew clean compileJava processResources --stacktrace
+          ./gradlew clean jar --stacktrace
 
       - name: Collect Core jar
         if: always()
