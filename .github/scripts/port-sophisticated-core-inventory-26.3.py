@@ -1184,3 +1184,59 @@ if mf.exists():
     mf.write_text(txt)
 
 print("Closed final common-pass Fabric 26.3 API renames.")
+
+
+# Safe API fixes confirmed directly against Minecraft 26.3 bytecode.
+# These are intentionally narrow and preserve the existing runtime semantics.
+
+# AbstractCookingRecipe#getCookingTime() -> cookingTime().
+cooking = java_root / "net/p3pp3rf1y/sophisticatedcore/upgrades/cooking/CookingLogic.java"
+if cooking.exists():
+    txt = cooking.read_text(errors="ignore")
+    txt = txt.replace(".getCookingTime()", ".cookingTime()")
+    cooking.write_text(txt)
+
+# Inventory#getSelected() -> getSelectedItem().
+server_player_mixin = java_root / "net/p3pp3rf1y/sophisticatedcore/mixin/common/ServerPlayerMixin.java"
+if server_player_mixin.exists():
+    txt = server_player_mixin.read_text(errors="ignore")
+    txt = txt.replace("inventory.getSelected()", "inventory.getSelectedItem()")
+    server_player_mixin.write_text(txt)
+
+# BucketItem now exposes the bucket fluid through getContent().
+bucket_wrapper = java_root / "com/github/salandora/sophisticatedfabriclib/fluid/api/v1/BucketPickupHandlerWrapper.java"
+if bucket_wrapper.exists():
+    txt = bucket_wrapper.read_text(errors="ignore")
+    txt = txt.replace("bucket.content", "bucket.getContent()")
+    bucket_wrapper.write_text(txt)
+
+# Use the public Fabric ItemApiLookup path instead of relying on the old injected ItemStack capability helper.
+sfl_fluid_util = java_root / "com/github/salandora/sophisticatedfabriclib/fluid/api/v1/FluidUtil.java"
+if sfl_fluid_util.exists():
+    txt = sfl_fluid_util.read_text(errors="ignore")
+    txt = txt.replace(
+        "return Optional.ofNullable(stack.sophisticatedFabricLibrary_getCapability(Capabilities.FluidHandler.ITEM));",
+        "return Optional.ofNullable(ContainerItemContext.withConstant(stack).find(Capabilities.FluidHandler.ITEM));"
+    )
+    sfl_fluid_util.write_text(txt)
+
+# PatchedDataComponentMap#set expects the exact component generic type in 26.3.
+item_stack_mixin = java_root / "net/p3pp3rf1y/sophisticatedcore/mixin/common/ItemStackMixin.java"
+if item_stack_mixin.exists():
+    txt = item_stack_mixin.read_text(errors="ignore")
+    old = """\t@Override
+\tpublic <T> @Nullable T sophisticatedCore_set(DataComponentType<? super T> type, @Nullable T value) {
+\t\treturn this.components.set(type, value);
+\t}
+"""
+    new = """\t@Override
+\t@SuppressWarnings(\"unchecked\")
+\tpublic <T> @Nullable T sophisticatedCore_set(DataComponentType<? super T> type, @Nullable T value) {
+\t\treturn this.components.set((DataComponentType<T>) (DataComponentType<?>) type, value);
+\t}
+"""
+    if old in txt:
+        txt = txt.replace(old, new)
+    item_stack_mixin.write_text(txt)
+
+print("Applied confirmed MC 26.3 cooking, selected-slot, bucket, fluid lookup, and component generic fixes.")
