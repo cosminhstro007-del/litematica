@@ -1754,3 +1754,56 @@ if stack_cfg.exists():
     stack_cfg.write_text(txt)
 
 print("Applied central 26.3 NBT Optional and ItemStack codec migration.")
+
+
+# SFL ItemStackHandler persistence moved from removed ItemStack#save/parse helpers to codecs.
+sfl_stack_handler = java_root / "com/github/salandora/sophisticatedfabriclib/transfer/api/v1/ItemStackHandler.java"
+if sfl_stack_handler.exists():
+    txt=sfl_stack_handler.read_text(errors="ignore")
+    if "import net.minecraft.nbt.NbtOps;" not in txt:
+        txt=txt.replace("import net.minecraft.nbt.ListTag;\n", "import net.minecraft.nbt.ListTag;\nimport net.minecraft.nbt.NbtOps;\n")
+    if "import net.minecraft.resources.RegistryOps;" not in txt:
+        txt=txt.replace("import net.minecraft.nbt.Tag;\n", "import net.minecraft.nbt.Tag;\nimport net.minecraft.resources.RegistryOps;\n")
+    old_ser="""\t\t\t\tCompoundTag itemTag = new CompoundTag();
+\t\t\t\titemTag.putInt("Slot", i);
+\t\t\t\tlistTag.add(itemStack.save(registries, itemTag));
+"""
+    new_ser="""\t\t\t\tCompoundTag itemTag = ItemStack.OPTIONAL_CODEC
+\t\t\t\t\t\t.encodeStart(RegistryOps.create(NbtOps.INSTANCE, registries), itemStack)
+\t\t\t\t\t\t.result()
+\t\t\t\t\t\t.filter(CompoundTag.class::isInstance)
+\t\t\t\t\t\t.map(CompoundTag.class::cast)
+\t\t\t\t\t\t.orElseGet(CompoundTag::new);
+\t\t\t\titemTag.putInt("Slot", i);
+\t\t\t\tlistTag.add(itemTag);
+"""
+    txt=txt.replace(old_ser,new_ser)
+    old_des="""\t\tsetSize(nbt.contains("Size", Tag.TAG_INT) ? nbt.getInt("Size") : stacks.size());
+\t\tListTag tagList = nbt.getList("Items", Tag.TAG_COMPOUND);
+\t\tfor (int i = 0; i < tagList.size(); i++) {
+\t\t\tCompoundTag itemTag = tagList.getCompound(i);
+\t\t\tint slot = itemTag.getInt("Slot");
+\t\t\tif (slot >= 0 && slot < getSlotCount()) {
+\t\t\t\tItemStack.parse(registries, itemTag).ifPresent(stack -> stacks.set(slot, stack));
+\t\t\t}
+\t\t}
+"""
+    new_des="""\t\tsetSize(nbt.contains("Size") ? nbt.getIntOr("Size", stacks.size()) : stacks.size());
+\t\tListTag tagList = nbt.getListOrEmpty("Items");
+\t\tfor (int i = 0; i < tagList.size(); i++) {
+\t\t\tCompoundTag itemTag = tagList.getCompound(i).orElseGet(CompoundTag::new);
+\t\t\tint slot = itemTag.getIntOr("Slot", -1);
+\t\t\tif (slot >= 0 && slot < getSlotCount()) {
+\t\t\t\tCompoundTag stackTag = itemTag.copy();
+\t\t\t\tstackTag.remove("Slot");
+\t\t\t\tItemStack.OPTIONAL_CODEC
+\t\t\t\t\t\t.parse(RegistryOps.create(NbtOps.INSTANCE, registries), stackTag)
+\t\t\t\t\t\t.result()
+\t\t\t\t\t\t.ifPresent(stack -> stacks.set(slot, stack));
+\t\t\t}
+\t\t}
+"""
+    txt=txt.replace(old_des,new_des)
+    sfl_stack_handler.write_text(txt)
+
+print("Applied SFL ItemStackHandler 26.3 codec persistence.")
