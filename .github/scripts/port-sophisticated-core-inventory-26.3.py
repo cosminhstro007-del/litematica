@@ -1835,6 +1835,19 @@ if deferred_holder.exists():
         "this.holder = registry.getHolder(this.key).orElse(null);",
         "this.holder = registry.get(this.key.location()).orElse(null);"
     )
+    # Holder.Kind was removed with the 26.x Holder API. This wrapper no longer implements Holder,
+    # so drop the obsolete kind() method and kind check from equals().
+    import re
+    txt=re.sub(
+        r'\n\s*public Kind kind\(\) \{\s*return Kind\.REFERENCE;\s*\}\s*',
+        '\n',
+        txt,
+        flags=re.S
+    )
+    txt=txt.replace(
+        "return obj instanceof DeferredHolder<?, ?> h\n\t\t\t\t&& h.kind() == Kind.REFERENCE\n\t\t\t\t&& h.getKey() == this.key;",
+        "return obj instanceof DeferredHolder<?, ?> h\n\t\t\t\t&& h.getKey() == this.key;"
+    )
     deferred_holder.write_text(txt)
 
 # Fabric resource condition now receives RegistryOps.RegistryInfoLookup.
