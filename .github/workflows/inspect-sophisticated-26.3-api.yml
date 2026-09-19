@@ -44,6 +44,7 @@ jobs:
             net.minecraft.world.inventory.ContainerSynchronizer \
             net.minecraft.world.inventory.RemoteSlot \
             net.minecraft.world.level.block.entity.BlockEntity \
+            net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity \
             net.minecraft.world.level.storage.ValueInput \
             net.minecraft.world.level.storage.ValueOutput \
             net.minecraft.world.level.dimension.DimensionType \
