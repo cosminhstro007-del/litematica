@@ -379,3 +379,39 @@ jobs:
           name: SophisticatedCore-26.3-Fabric
           path: out/
           if-no-files-found: warn
+
+      - name: Restore Core client/runtime sources
+        run: python3 .github/scripts/restore-sophisticated-core-client-26.3.py
+
+      - name: Patch Core client APIs for 26.3
+        run: python3 .github/scripts/port-sophisticated-core-client-26.3.py
+
+      - name: Audit restored Core client sources
+        shell: bash
+        run: |
+          echo "=== Restored client classes ==="
+          find core-src/src/main/java/net/p3pp3rf1y/sophisticatedcore/client -type f -name '*.java' | sort || true
+          echo "=== Optional third-party imports that slipped through ==="
+          grep -RhoE '^import (mezz|dev[.]emi|me[.]shedaniel|net[.]blay09|earth[.]terrarium|de[.]maxhenkel|top[.]theillusivec4|io[.]wispforest)[^;]*;' core-src/src/main/java 2>/dev/null | sort -u || true
+
+      - name: Compile full Sophisticated Core client 26.3
+        working-directory: core-src
+        run: |
+          chmod +x ./gradlew
+          ./gradlew clean jar --stacktrace
+
+      - name: Collect full Core jar
+        if: success()
+        shell: bash
+        run: |
+          rm -rf out-full
+          mkdir -p out-full
+          find core-src/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' -exec cp {} out-full/ \;
+
+      - name: Upload full Core
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: SophisticatedCore-26.3-Fabric-FULL
+          path: out-full/
+          if-no-files-found: error
