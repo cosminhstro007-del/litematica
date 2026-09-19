@@ -1807,3 +1807,137 @@ if sfl_stack_handler.exists():
     sfl_stack_handler.write_text(txt)
 
 print("Applied SFL ItemStackHandler 26.3 codec persistence.")
+
+
+# Fifth MC 26.3 pass: straightforward Fabric/SFL API renames.
+
+# Registry-of-registries now returns holders from get(); use getValue() for actual registry values.
+deferred_reg = java_root / "com/github/salandora/sophisticatedfabriclib/util/DeferredRegister.java"
+if deferred_reg.exists():
+    txt=deferred_reg.read_text(errors="ignore")
+    txt=txt.replace(
+        "BuiltInRegistries.REGISTRY.get(this.registryKey.identifier())",
+        "BuiltInRegistries.REGISTRY.getValue(this.registryKey.identifier())"
+    )
+    deferred_reg.write_text(txt)
+
+# Holder became sealed in Minecraft 26.x. SFL's lazy holder wrapper only needs Supplier semantics.
+deferred_holder = java_root / "com/github/salandora/sophisticatedfabriclib/util/DeferredHolder.java"
+if deferred_holder.exists():
+    txt=deferred_holder.read_text(errors="ignore")
+    txt=txt.replace("implements Holder<T>, Supplier<U>", "implements Supplier<U>")
+    txt=txt.replace("\t@Override\n", "")
+    txt=txt.replace(
+        "BuiltInRegistries.REGISTRY.get(this.key.registry())",
+        "BuiltInRegistries.REGISTRY.getValue(this.key.registry())"
+    )
+    txt=txt.replace(
+        "this.holder = registry.getHolder(this.key).orElse(null);",
+        "this.holder = registry.get(this.key.location()).orElse(null);"
+    )
+    deferred_holder.write_text(txt)
+
+# Fabric resource condition now receives RegistryOps.RegistryInfoLookup.
+item_enabled = java_root / "net/p3pp3rf1y/sophisticatedcore/crafting/ItemEnabledCondition.java"
+if item_enabled.exists():
+    txt=item_enabled.read_text(errors="ignore")
+    txt=txt.replace("import net.minecraft.core.HolderLookup;\n", "import net.minecraft.resources.RegistryOps;\n")
+    if "import org.jspecify.annotations.Nullable;" not in txt:
+        txt=txt.replace("import net.p3pp3rf1y.sophisticatedcore.init.ModRecipes;\n",
+                        "import net.p3pp3rf1y.sophisticatedcore.init.ModRecipes;\nimport org.jspecify.annotations.Nullable;\n")
+    txt=txt.replace(
+        "public boolean test(HolderLookup.Provider registryLookup)",
+        "public boolean test(RegistryOps.@Nullable RegistryInfoLookup registryInfo)"
+    )
+    item_enabled.write_text(txt)
+
+# Fabric transfer variant component accessor rename.
+simple_fluid = java_root / "com/github/salandora/sophisticatedfabriclib/fluid/api/v1/SimpleFluidContent.java"
+if simple_fluid.exists():
+    txt=simple_fluid.read_text(errors="ignore")
+    txt=txt.replace("getComponentMap()", "getComponents()")
+    simple_fluid.write_text(txt)
+
+# SingleVariantStorage no longer exposes readNbt/writeNbt helpers; use FluidStack's own codec.
+fluid_stack = java_root / "com/github/salandora/sophisticatedfabriclib/fluid/api/v1/FluidStack.java"
+if fluid_stack.exists():
+    txt=fluid_stack.read_text(errors="ignore")
+    if "import net.minecraft.nbt.NbtOps;" not in txt:
+        txt=txt.replace("import net.minecraft.nbt.CompoundTag;\n", "import net.minecraft.nbt.CompoundTag;\nimport net.minecraft.nbt.NbtOps;\n")
+    if "import net.minecraft.resources.RegistryOps;" not in txt:
+        txt=txt.replace("import net.minecraft.network.codec.StreamCodec;\n", "import net.minecraft.network.codec.StreamCodec;\nimport net.minecraft.resources.RegistryOps;\n")
+    old_save="""\t\tCompoundTag tag = new CompoundTag();
+\t\twriteNbt(tag, lookup);
+\t\treturn tag;
+"""
+    new_save="""\t\treturn CODEC.encodeStart(RegistryOps.create(NbtOps.INSTANCE, lookup), this)
+\t\t\t\t.result()
+\t\t\t\t.filter(CompoundTag.class::isInstance)
+\t\t\t\t.map(CompoundTag.class::cast)
+\t\t\t\t.orElseGet(CompoundTag::new);
+"""
+    txt=txt.replace(old_save,new_save)
+    old_parse="""\t\tFluidStack stack = new FluidStack();
+\t\tstack.readNbt(tag, lookup);
+\t\treturn stack;
+"""
+    new_parse="""\t\treturn CODEC.parse(RegistryOps.create(NbtOps.INSTANCE, lookup), tag)
+\t\t\t\t.result()
+\t\t\t\t.orElse(EMPTY);
+"""
+    txt=txt.replace(old_parse,new_parse)
+    fluid_stack.write_text(txt)
+
+# Fabric fluid attribute API rename.
+fluid_type = java_root / "com/github/salandora/sophisticatedfabriclib/fluid/api/v1/FluidType.java"
+if fluid_type.exists():
+    txt=fluid_type.read_text(errors="ignore")
+    txt=txt.replace("public int getLuminance(FluidVariant variant)", "public int getLightEmission(FluidVariant variant)")
+    fluid_type.write_text(txt)
+
+# Fabric networking API rename.
+packet_dist = java_root / "net/p3pp3rf1y/sophisticatedcore/network/PacketDistributor.java"
+if packet_dist.exists():
+    txt=packet_dist.read_text(errors="ignore")
+    txt=txt.replace("ServerPlayNetworking::createS2CPacket", "ServerPlayNetworking::createClientboundPacket")
+    txt=txt.replace("ServerPlayNetworking.createS2CPacket", "ServerPlayNetworking.createClientboundPacket")
+    packet_dist.write_text(txt)
+
+# Porting Lib stack-slot persistence: migrate removed ItemStack save/parse helpers.
+slot = java_root / "io/github/fabricators_of_create/porting_lib/transfer/item/ItemStackHandlerSlot.java"
+if slot.exists():
+    txt=slot.read_text(errors="ignore")
+    if "import net.minecraft.nbt.NbtOps;" not in txt:
+        txt=txt.replace("import net.minecraft.nbt.Tag;\n", "import net.minecraft.nbt.Tag;\nimport net.minecraft.nbt.NbtOps;\n")
+    if "import net.minecraft.resources.RegistryOps;" not in txt:
+        txt=txt.replace("import net.minecraft.world.item.ItemStack;\n", "import net.minecraft.world.item.ItemStack;\nimport net.minecraft.resources.RegistryOps;\n")
+    txt=txt.replace(
+        "return stack.save(provider, tag);",
+        "return ItemStack.OPTIONAL_CODEC.encodeStart(RegistryOps.create(NbtOps.INSTANCE, provider), stack).result().orElse(tag);"
+    )
+    txt=txt.replace(
+        "ItemStack.parse(provider, tag).ifPresent(this::setStack);",
+        "ItemStack.OPTIONAL_CODEC.parse(RegistryOps.create(NbtOps.INSTANCE, provider), tag).result().ifPresent(this::setStack);"
+    )
+    slot.write_text(txt)
+
+# Generic container entity handlers: chest boats are split by wood type in 26.3.
+sfl_caps = java_root / "com/github/salandora/sophisticatedfabriclib/util/Capabilities.java"
+if sfl_caps.exists():
+    txt=sfl_caps.read_text(errors="ignore")
+    if "import net.minecraft.world.Container;" not in txt:
+        txt=txt.replace("import net.minecraft.core.Direction;\n", "import net.minecraft.core.Direction;\nimport net.minecraft.world.Container;\n")
+    txt=re.sub(r'import java[.]util[.]List;\n', '', txt)
+    txt=re.sub(
+        r'\s*var containerEntities = List[.]of\([\s\S]*?\);\s*for \(var entityType : containerEntities\) \{[\s\S]*?\}\s*',
+        '''
+\t\t\tENTITY.registerFallback((entity, ctx) -> entity instanceof Container container ? InvWrapper.of(container) : null);
+\t\t\tENTITY_AUTOMATION.registerFallback((entity, direction) -> entity instanceof Container container ? InvWrapper.of(container) : null);
+
+''',
+        txt,
+        count=1
+    )
+    sfl_caps.write_text(txt)
+
+print("Applied Fabric/SFL registry, fluid, networking and persistence renames for 26.3.")
