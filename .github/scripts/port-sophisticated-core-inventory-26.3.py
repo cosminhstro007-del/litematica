@@ -2089,7 +2089,7 @@ for rel in [
                                    "public RecipeSerializer<? extends CustomRecipe> getSerializer()")
                  if "extends CustomRecipe" in t else
                  t.replace("public RecipeSerializer<?> getSerializer()",
-                           "public RecipeSerializer<? extends NormalCraftingRecipe> getSerializer()"))
+                           "public RecipeSerializer<? extends ShapedRecipe> getSerializer()"))
 
 # CustomRecipe no longer takes CraftingBookCategory; dye color accessor changed.
 def patch_storage_dye(t):
