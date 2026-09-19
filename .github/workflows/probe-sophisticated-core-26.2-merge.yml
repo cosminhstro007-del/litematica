@@ -1,0 +1,48 @@
+name: Probe Sophisticated Core 26.2 Merge
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - sophisticated-26.3-fabric-port
+    paths:
+      - .github/workflows/probe-sophisticated-core-26.2-merge.yml
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Fabric fork
+        uses: actions/checkout@v6
+        with:
+          repository: Salandora/SophisticatedCore
+          ref: 1.21.x-fabric-dev
+          path: core-src
+          fetch-depth: 0
+
+      - name: Fetch official upstream 26.2 and probe merge
+        working-directory: core-src
+        shell: bash
+        run: |
+          git config user.email "port-probe@example.invalid"
+          git config user.name "Port Probe"
+          git remote add official https://github.com/P3pp3rF1y/SophisticatedCore.git
+          git fetch official 26.2 --no-tags
+          echo "Fabric head: $(git rev-parse HEAD)"
+          echo "Official 26.2: $(git rev-parse FETCH_HEAD)"
+          echo "Merge base: $(git merge-base HEAD FETCH_HEAD)"
+          set +e
+          git merge --no-commit --no-ff FETCH_HEAD
+          status=$?
+          set -e
+          echo "merge exit=$status"
+          echo "=== conflict count ==="
+          git diff --name-only --diff-filter=U | tee /tmp/conflicts.txt
+          echo "CONFLICTS=$(wc -l < /tmp/conflicts.txt)"
+          echo "=== conflict files ==="
+          cat /tmp/conflicts.txt
+          echo "=== overall changed file count ==="
+          git status --porcelain | wc -l
+          echo "=== status sample ==="
+          git status --short | head -300
+          exit 0
