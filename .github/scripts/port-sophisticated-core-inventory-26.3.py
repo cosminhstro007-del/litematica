@@ -1507,3 +1507,62 @@ for rel in [
     p.write_text(txt)
 
 print("Applied MC 26.3 fuel-component, environment attribute, Fabric registry and entity-container fixes.")
+
+
+# Container remote-state changes in 26.3: remoteCarried is RemoteSlot, not ItemStack.
+storage_menu = java_root / "net/p3pp3rf1y/sophisticatedcore/common/gui/StorageContainerMenuBase.java"
+if storage_menu.exists():
+    txt = storage_menu.read_text(errors="ignore")
+    if "import net.minecraft.world.inventory.RemoteSlot;" not in txt:
+        txt = txt.replace("import net.minecraft.world.inventory.ContainerSynchronizer;\n", "import net.minecraft.world.inventory.ContainerSynchronizer;\nimport net.minecraft.world.inventory.RemoteSlot;\n")
+    txt = txt.replace("remoteSlots.add(ItemStack.EMPTY);", "remoteSlots.add(RemoteSlot.PLACEHOLDER);")
+    txt = txt.replace(
+        "remoteCarried = getCarried().copy();",
+        "remoteCarried.force(getCarried().copy());"
+    )
+    txt = txt.replace(
+        "synchronizer.sendInitialData(this, allRemoteSlots, remoteCarried, new int[]{});",
+        "synchronizer.sendInitialData(this, allRemoteSlots, getCarried().copy(), new int[]{});"
+    )
+    # Vanilla no longer has setRemoteSlotNoCopy; keep this Sophisticated helper without pretending to override.
+    txt = txt.replace(
+        "\t@Override\n\tpublic void setRemoteSlotNoCopy(int slotIndex, ItemStack stack)",
+        "\tpublic void setRemoteSlotNoCopy(int slotIndex, ItemStack stack)"
+    )
+    storage_menu.write_text(txt)
+
+# Update the access widener to the 26.3 field/method descriptors.
+aw = CORE / "src/main/resources/sophisticatedcore.accesswidener"
+if aw.exists():
+    txt = aw.read_text(errors="ignore")
+    txt = txt.replace(
+        "accessible field net/minecraft/world/inventory/AbstractContainerMenu remoteCarried Lnet/minecraft/world/item/ItemStack;",
+        "accessible field net/minecraft/world/inventory/AbstractContainerMenu remoteCarried Lnet/minecraft/world/inventory/RemoteSlot;"
+    )
+    # doClick is private and now takes ContainerInput; make it accessible for the later exact behavior port.
+    txt = txt.replace(
+        "transitive-extendable method net/minecraft/world/inventory/AbstractContainerMenu doClick (IILnet/minecraft/world/inventory/ClickType;Lnet/minecraft/world/entity/player/Player;)V",
+        "accessible method net/minecraft/world/inventory/AbstractContainerMenu doClick (IILnet/minecraft/world/inventory/ContainerInput;Lnet/minecraft/world/entity/player/Player;)V"
+    )
+    aw.write_text(txt)
+
+# Slot background APIs now carry only the texture Identifier, not atlas+texture Pair.
+for rel in [
+    "net/p3pp3rf1y/sophisticatedcore/inventory/IInventoryPartHandler.java",
+    "net/p3pp3rf1y/sophisticatedcore/inventory/InventoryPartitioner.java",
+    "net/p3pp3rf1y/sophisticatedcore/inventory/InventoryHandler.java",
+]:
+    p = java_root / rel
+    if not p.exists():
+        continue
+    txt = p.read_text(errors="ignore")
+    txt = txt.replace("Pair<Identifier, Identifier> getNoItemIcon", "Identifier getNoItemIcon")
+    txt = txt.replace("Pair<ResourceLocation, ResourceLocation> getNoItemIcon", "Identifier getNoItemIcon")
+    # After common mapping migration ResourceLocation is Identifier; handle both possible bodies.
+    txt = txt.replace(
+        "return getPartBySlot(slot).getNoItemIcon(slot);",
+        "return getPartBySlot(slot).getNoItemIcon(slot);"
+    )
+    p.write_text(txt)
+
+print("Applied 26.3 RemoteSlot access-widener and slot-icon type migration.")
