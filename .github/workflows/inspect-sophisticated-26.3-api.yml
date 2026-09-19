@@ -65,6 +65,7 @@ jobs:
             net.minecraft.world.entity.EntityTypes \
             net.minecraft.world.item.DyeColor \
             net.minecraft.server.permissions.PermissionSet \
+            net.minecraft.server.permissions.Permissions \
             net.minecraft.world.entity.player.StackedItemContents \
             net.minecraft.world.level.storage.ValueInput \
             net.minecraft.world.level.storage.ValueOutput \
