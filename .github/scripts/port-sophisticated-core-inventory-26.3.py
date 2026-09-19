@@ -2400,7 +2400,7 @@ if not tank.exists():
     raw = raw.replace("io.github.fabricators_of_create.porting_lib.fluids.FluidStack",
                       "com.github.salandora.sophisticatedfabriclib.fluid.api.v1.FluidStack")
     raw = raw.replace("io.github.fabricators_of_create.porting_lib.transfer.item.SlottedStackStorage",
-                      "com.github.salandora.sophisticatedfabriclib.transfer.api.v1.SlottedStackStorage")
+                      "io.github.fabricators_of_create.porting_lib.transfer.item.SlottedStackStorage")
     tank.write_text(raw)
 
 print("Applied seventh MC 26.3 targeted cleanup pass.")
