@@ -25,6 +25,14 @@ jobs:
           ./gradlew classes
           jarfile=$(find .gradle/loom-cache/minecraftMaven -name '*.jar' | grep '26.3' | grep -E 'merged|minecraft' | head -n 1)
           echo "JAR=$jarfile"
+
+          echo "===== CLIENT CLASS NAME SEARCH ====="
+          jar tf "$jarfile" | grep -Ei 'GuiGraphics|Gui.*Graphics|Graphics.*Gui|MultiBuffer|RenderType|ItemRenderer|BakedModel|TextureSheetParticle|BlockModelShaper|ContainerInput|ClickType|TextureAtlasSprite|PoseStack|Particle.*Renderer|Item.*Render' | head -500 || true
+          echo "===== FABRIC API CLIENT SEARCH ====="
+          find ~/.gradle/caches -type f -name '*.jar' | grep -E 'fabric-api|fabric-render|fabric-particle|fabric-transfer' | head -80 | while read f; do
+            echo "--- $f"
+            jar tf "$f" | grep -Ei 'ParticleFactory|Particle.*Registry|FluidRender|Fluid.*Render|RenderHandler|GuiGraphics' | head -120 || true
+          done
           echo "===== fuel-related classes ====="
           jar tf "$jarfile" | grep -i Fuel | head -100 || true
           for cls in \
