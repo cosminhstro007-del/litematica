@@ -25,6 +25,8 @@ jobs:
           ./gradlew classes
           jarfile=$(find .gradle/loom-cache/minecraftMaven -name '*.jar' | grep '26.3' | grep -E 'merged|minecraft' | head -n 1)
           echo "JAR=$jarfile"
+          echo "===== fuel-related classes ====="
+          jar tf "$jarfile" | grep -i Fuel | head -100 || true
           for cls in             net.minecraft.world.item.crafting.AbstractCookingRecipe             net.minecraft.world.item.crafting.Recipe             net.minecraft.world.item.Item             net.minecraft.world.item.ItemStack             net.minecraft.server.MinecraftServer             net.minecraft.world.entity.player.Inventory             net.minecraft.world.inventory.AbstractContainerMenu             net.minecraft.world.inventory.ContainerSynchronizer             net.minecraft.world.inventory.RemoteSlot             net.minecraft.world.level.block.entity.BlockEntity             net.minecraft.util.ProblemReporter             net.minecraft.world.level.storage.ValueInput             net.minecraft.world.level.storage.ValueOutput             net.minecraft.world.level.dimension.DimensionType             net.minecraft.world.item.BucketItem             net.fabricmc.fabric.api.event.registry.FabricRegistryBuilder; do
               echo "===== $cls ====="
               javap -p -classpath "$jarfile:$HOME/.gradle/caches/modules-2/files-2.1/net.fabricmc.fabric-api/" "$cls" || true
