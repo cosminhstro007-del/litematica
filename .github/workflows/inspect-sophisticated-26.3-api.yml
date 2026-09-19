@@ -61,7 +61,16 @@ jobs:
             net.minecraft.world.entity.player.StackedContents \
             net.minecraft.world.entity.EntityType \
             net.minecraft.resources.ResourceKey \
-            net.minecraft.data.recipes.RecipeOutput; do
+            net.minecraft.data.recipes.RecipeOutput \
+            net.minecraft.world.entity.EntityTypes \
+            net.minecraft.world.item.DyeColor \
+            net.minecraft.server.permissions.PermissionSet \
+            net.minecraft.world.entity.player.StackedItemContents \
+            net.minecraft.world.level.storage.ValueInput \
+            net.minecraft.world.level.storage.ValueOutput \
+            net.minecraft.world.item.crafting.Recipe \
+            net.minecraft.world.item.crafting.CraftingRecipe \
+            net.minecraft.world.level.block.entity.BlockEntity; do
               echo "===== $cls ====="
               javap -p -classpath "$jarfile" "$cls" || true
           done
