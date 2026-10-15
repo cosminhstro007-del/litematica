@@ -1,0 +1,1 @@
+Trigger isolated Tweakerge 26.3 client smoke CI using Git ref update. Do not merge into Litematica.
