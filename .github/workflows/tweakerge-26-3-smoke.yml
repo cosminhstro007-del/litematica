@@ -1,0 +1,116 @@
+name: Tweakerge 26.3 NeoForge isolated runtime
+on:
+  workflow_dispatch:
+  push:
+    branches: ["DEV/26.3"]
+    paths: [".github/workflows/tweakerge-26-3-smoke.yml"]
+  schedule:
+    - cron: "37 * * * *"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: tweakerge-26-3-isolated
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Avoid repeating a previously successful scheduled smoke test
+        id: gate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          count=$(curl --max-time 15 -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/tweakerge-26-3-smoke.yml/runs?status=success&per_page=1" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("total_count",0))' || echo 0)
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" && "$count" =~ ^[0-9]+$ && "$count" -gt 0 ]]; then
+            echo "run_test=false" >> "$GITHUB_OUTPUT"
+            echo "Previously successful smoke test found. Skipping expensive run."
+          else
+            echo "run_test=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-java@v5
+        if: steps.gate.outputs.run_test == 'true'
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Install display and OpenGL
+        if: steps.gate.outputs.run_test == 'true'
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb mesa-utils libgl1-mesa-dri libglx-mesa0 libasound2 libxrandr2 libxi6 libxcursor1 libxinerama1 libxxf86vm1 openbox
+      - name: Get Tweakerge source from upstream
+        if: steps.gate.outputs.run_test == 'true'
+        shell: bash
+        run: |
+          git clone --depth=1 --branch neoforge/26.3 https://github.com/CagayakeGirls/tweakeroo-neoforge.git tweakerge
+          mkdir -p proof
+          git -C tweakerge rev-parse HEAD > proof/source-commit.txt
+          java -version 2>&1 | tee proof/java-version.txt
+      - name: Build Tweakerge with MaFgLib
+        if: steps.gate.outputs.run_test == 'true'
+        shell: bash
+        run: |
+          cd tweakerge
+          chmod +x gradlew
+          ./gradlew build --no-daemon --console=plain --stacktrace > ../proof/build.log 2>&1 || { tail -n 150 ../proof/build.log; exit 1; }
+          ls -lah build/libs/ > ../proof/jars.txt
+      - name: Launch NeoForge Minecraft 26.3 client
+        if: steps.gate.outputs.run_test == 'true'
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          MESA_LOADER_DRIVER_OVERRIDE: llvmpipe
+        run: |
+          set +e
+          Xvfb :99 -screen 0 1280x720x24 +extension GLX +render -noreset > proof/xvfb.log 2>&1 &
+          XVFB_PID=$!
+          export DISPLAY=:99
+          sleep 2
+          glxinfo -B > proof/glxinfo.log 2>&1
+          openbox --sm-disable > proof/openbox.log 2>&1 &
+          WM_PID=$!
+          cd tweakerge
+          timeout --signal=TERM --kill-after=15s 240s ./gradlew runClient --no-daemon --console=plain --stacktrace > ../proof/runclient.log 2>&1
+          RC=$?
+          cd ..
+          cp tweakerge/run/logs/latest.log proof/latest.log 2>/dev/null
+          find tweakerge/run/crash-reports -maxdepth 1 -type f -exec cp {} proof/ \; 2>/dev/null
+          kill "$WM_PID" "$XVFB_PID" 2>/dev/null
+          echo "runClient exit code: $RC" | tee proof/summary.txt
+          grep -Ein 'mixin apply failed|invalidinjectionexception|nosuchmethoderror|noclassdeffounderror|error|exception|tweakerge|mafglib|created window|graphics backend' proof/latest.log proof/runclient.log | tail -n 180 > proof/highlights.txt 2>/dev/null
+          tail -n 120 proof/latest.log 2>/dev/null
+          if [ ! -s proof/latest.log ]; then
+            echo "FAIL: Minecraft log missing" | tee -a proof/summary.txt
+            exit 1
+          fi
+          if grep -Eiq 'Mixin apply failed|InvalidInjectionException|NoSuchMethodError|NoClassDefFoundError|ExceptionInInitializerError|UnsupportedClassVersionError|Crash report saved' proof/latest.log proof/runclient.log; then
+            echo "FAIL: startup exception" | tee -a proof/summary.txt
+            exit 1
+          fi
+          if [ "$RC" -ne 124 ]; then
+            echo "FAIL: client exited instead of remaining active for smoke interval" | tee -a proof/summary.txt
+            exit 1
+          fi
+          if ! grep -Eiq 'tweakerge|tweakeroo' proof/latest.log; then
+            echo "FAIL: Tweakerge not present in client log" | tee -a proof/summary.txt
+            exit 1
+          fi
+          if ! grep -Eiq 'Created window|Using graphics backend|OpenGL|Vulkan' proof/latest.log; then
+            echo "FAIL: no confirmed client graphics initialization" | tee -a proof/summary.txt
+            exit 1
+          fi
+          echo "PASS: Minecraft client launched with Tweakerge and remained active. Gameplay features NOT tested." | tee -a proof/summary.txt
+      - name: Upload logs for diagnosis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tweakerge-26-3-runtime-evidence
+          path: proof/
+          if-no-files-found: ignore
