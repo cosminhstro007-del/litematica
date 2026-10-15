@@ -1,0 +1,86 @@
+name: Tweakerge NeoForge 26.3 isolated client test
+on:
+  push:
+    branches:
+      - test/tweakerge-26-3-client
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  neoforge-client:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Install headless OpenGL dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb mesa-utils libgl1-mesa-dri libglx-mesa0 libasound2 libxrandr2 libxi6 libxcursor1 libxinerama1 libxxf86vm1 openbox
+      - name: Fetch exact Tweakerge NeoForge 26.3 source
+        run: |
+          git clone --depth 1 --branch neoforge/26.3 https://github.com/CagayakeGirls/tweakeroo-neoforge.git tweakerge
+          mkdir -p proof
+          git -C tweakerge rev-parse HEAD > proof/source_sha.txt
+          java -version 2>&1 | tee proof/java.txt
+      - name: Build Tweakerge 26.3 with MaFgLib
+        run: |
+          cd tweakerge
+          chmod +x gradlew
+          ./gradlew build --no-daemon --console=plain --stacktrace > ../proof/build.log 2>&1 || { tail -n 160 ../proof/build.log; exit 1; }
+          ls -l build/libs/ > ../proof/jars.txt
+      - name: Start Minecraft NeoForge 26.3 with virtual graphics
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          MESA_LOADER_DRIVER_OVERRIDE: llvmpipe
+        run: |
+          set +e
+          Xvfb :99 -screen 0 1280x720x24 +extension GLX +render -noreset > proof/xvfb.log 2>&1 &
+          XVFB_PID=$!
+          export DISPLAY=:99
+          sleep 2
+          glxinfo -B > proof/glxinfo.log 2>&1
+          openbox --sm-disable > proof/openbox.log 2>&1 &
+          WM_PID=$!
+          cd tweakerge
+          timeout --signal=TERM --kill-after=20s 300s ./gradlew runClient --no-daemon --console=plain --stacktrace > ../proof/runClient.log 2>&1
+          RC=$?
+          cd ..
+          cp tweakerge/run/logs/latest.log proof/latest.log 2>/dev/null
+          find tweakerge/run/crash-reports -type f -maxdepth 1 -exec cp {} proof/ \; 2>/dev/null
+          kill "$WM_PID" "$XVFB_PID" 2>/dev/null
+          echo "runClient exit code: $RC (124 means time-limited)" | tee proof/summary.txt
+          grep -Ein 'mixin apply failed|invalidinjectionexception|nosuchmethoderror|noclassdeffounderror|classnotfoundexception|error|exception|loading minecraft|tweakerge|mafglib|created window|graphics backend|sound engine' proof/latest.log proof/runClient.log | tail -n 180 > proof/error-and-startup-matches.txt 2>/dev/null
+          cat proof/summary.txt
+          tail -n 110 proof/latest.log 2>/dev/null
+          if [ -f proof/latest.log ]; then
+            if grep -Eiq 'Mixin apply failed|InvalidInjectionException|NoSuchMethodError|NoClassDefFoundError|ExceptionInInitializerError|UnsupportedClassVersionError|Crash report saved' proof/latest.log proof/runClient.log; then
+              echo "CRITICAL ERROR FOUND" | tee -a proof/summary.txt
+              exit 1
+            fi
+          else
+            echo "No Minecraft client latest.log; startup not verified" | tee -a proof/summary.txt
+            exit 1
+          fi
+          if [ "$RC" -ne 124 ] && [ "$RC" -ne 0 ]; then
+            echo "Client process exited unexpectedly" | tee -a proof/summary.txt
+            exit 1
+          fi
+          if grep -Eiq 'created window|using graphics backend|sound engine started|OpenAL initialized|OpenGL' proof/latest.log; then
+            echo "Graphics/client startup evidence present (NOT full gameplay verification)" | tee -a proof/summary.txt
+          else
+            echo "No evidence of completed client startup" | tee -a proof/summary.txt
+            exit 1
+          fi
+      - name: Upload smoke test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tweakerge-neoforge-26-3-smoke-logs
+          path: proof/
+          if-no-files-found: warn
