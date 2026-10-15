@@ -4,6 +4,11 @@ on:
     branches:
       - test/tweakerge-26-3-client
   workflow_dispatch:
+  pull_request:
+    branches:
+      - DEV/26.3
+    paths:
+      - .github/workflows/tweakerge-26-3-smoke.yml
 
 permissions:
   contents: read
