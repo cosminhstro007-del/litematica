@@ -1,15 +1,15 @@
-[![](https://jitpack.io/v/sakura-ryoko/litematica.svg)](https://jitpack.io/#sakura-ryoko/litematica)
+# Void Maw - Minecraft Java 26.3 (Fabric)
+Custom horror monster with a large square face, hollow eyes, articulated jaw, distinct teeth, long arms, roaming + melee AI, lunge, shriek and Darkness debuff. Also has a pixel-art spawn egg.
 
-Litematica
-==============
-Litematica is a client-side Minecraft mod using LiteLoader.
-It is more or less a re-creation of or a substitute for [Schematica](https://www.curseforge.com/minecraft/mc-mods/schematica),
-for players who don't want to have Forge installed.
-For compiled builds (= downloads), see https://www.curseforge.com/minecraft/mc-mods/litematica/files/all
+**Build:** Java 25, Gradle 9.7.1, Fabric Loader 0.19.5, Fabric API 0.163.0+26.3.
 
-Compiling
-=========
-* Clone the repository
-* Open a command prompt/terminal to the repository directory
-* run 'gradlew build'
-* The built jar file will be in build/libs/
+This branch intentionally does not modify the original repository's default branch, which contains Litematica sources. It is an isolated project because the GitHub connector does not support repository creation.
+
+GitHub Actions workflow installs Python/Pillow for deterministic texture generation and compiles the JAR.
+After success, use Actions > Build Void Maw Fabric 26.3 > Artifacts.
+
+Commands:
+`/give @p voidmaw:void_maw_spawn_egg`
+`/summon voidmaw:void_maw`
+
+**Rendering caveat:** the reference picture was only a 2D render; the visible face and body colors are sampled while hidden sides are reconstructed.
