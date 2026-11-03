@@ -1,6 +1,11 @@
 name: Void Maw Minecraft 26.3 JAR
 run-name: Build Void Maw for Fabric 26.3
 on:
+  push:
+    branches:
+      - 'DEV/26.3'
+    paths:
+      - '.github/workflows/voidmaw-fabric-26-3-build.yml'
   workflow_dispatch:
 jobs:
   build-voidmaw:
