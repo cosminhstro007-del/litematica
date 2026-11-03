@@ -1,4 +1,5 @@
 name: Void Maw Minecraft 26.3 JAR
+# Auto-build retry: Minecraft 26.3 creative tab fix
 run-name: Build Void Maw for Fabric 26.3
 on:
   push:
