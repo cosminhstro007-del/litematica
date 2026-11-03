@@ -3,6 +3,8 @@ on:
   push:
     branches: [voidmaw-fabric-26.3]
   workflow_dispatch:
+  pull_request:
+    branches: [voidmaw-fabric-26.3]
 jobs:
   build:
     runs-on: ubuntu-latest
