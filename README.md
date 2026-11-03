@@ -13,3 +13,7 @@ Commands:
 `/summon voidmaw:void_maw`
 
 **Rendering caveat:** the reference picture was only a 2D render; the visible face and body colors are sampled while hidden sides are reconstructed.
+
+## Build from a phone (if Actions did not start automatically)
+
+Open this branch's README.md on the GitHub website, tap the pencil icon, add a blank line, and commit the small edit directly to `voidmaw-fabric-26.3`. A real browser commit triggers the `push` event for `.github/workflows/build.yml`. Then open the repository's **Actions** tab, choose **Build Void Maw Fabric 26.3**, and if successful download the `VoidMaw-Fabric-26.3-JAR` artifact. Use the JAR within that ZIP, not the sources JAR. The project has not yet been compiled or tested.
