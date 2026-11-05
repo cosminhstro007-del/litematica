@@ -114,9 +114,13 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add hephaestus-forge-26.3/releases/HephaestusForge-26.3-Alpha4-Hardening.jar
-          git commit -m 'Publish verified Forge Alpha4 hardened runtime'
-          git pull --rebase origin hephaestus-forge-26.3-alpha4-hardening
-          git push origin HEAD:hephaestus-forge-26.3-alpha4-hardening
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publish verified Forge Alpha4 hardened runtime'
+            git pull --rebase origin hephaestus-forge-26.3-alpha4-hardening
+            git push origin HEAD:hephaestus-forge-26.3-alpha4-hardening
+          else
+            echo 'Existing Alpha4 release JAR is unchanged; no duplicate commit needed'
+          fi
       - name: Archive build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
