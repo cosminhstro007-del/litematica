@@ -35,6 +35,7 @@ jobs:
           python3 hephaestus-forge-26.3/fix_nbt_inventory_reload.py forge-src
           python3 hephaestus-forge-26.3/fix_idle_performance.py forge-src
           python3 hephaestus-forge-26.3/fix_indexed_melting.py forge-src
+          python3 hephaestus-forge-26.3/fix_slot_handler_indices.py forge-src
           python3 hephaestus-forge-26.3/fix_menu_item_loss.py forge-src
           cp forge-src/LICENSE forge-src/src/main/resources/LICENSE-hephaestusforge.txt
           java -version
