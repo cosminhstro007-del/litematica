@@ -11,10 +11,36 @@ anchor='        System.out.println("HEPHAESTUS_VERIFY_SUCCESS recipes, table, ba
 assert s.count(anchor)==1
 s=s.replace(anchor,"""        checkFluidTransactions();
         checkBlockEntitySerialization(level,y);
+        checkNoDropsOnNbtReload(level,y);
 """+anchor)
 marker="    public static void check(MinecraftServer server) {"
 assert s.count(marker)==1
-s=s.replace(marker,"""    private static void checkFluidTransactions() {
+s=s.replace(marker,"""    private static void checkNoDropsOnNbtReload(ServerLevel level,int y) {
+        BlockPos pos=new BlockPos(46,y,20);
+        level.setBlockAndUpdate(pos,ModBlocks.SMELTERY_CONTROLLER.get().defaultBlockState());
+        var old=(SmelteryControllerBlockEntity)level.getBlockEntity(pos);
+        require(old!=null,"Reload fixture failed");
+        // Existing in-memory data should NEVER become dropped item entities
+        // merely because the authoritative NBT payload replaces it.
+        old.itemHandler=new com.titammods.compat.port.legacy.ItemStackHandler(4);
+        old.itemHandler.setStackInSlot(3,new ItemStack(Items.DIAMOND,3));
+
+        var source=new SmelteryControllerBlockEntity(pos,old.getBlockState());
+        source.itemHandler=new com.titammods.compat.port.legacy.ItemStackHandler(1);
+        source.itemHandler.setStackInSlot(0,new ItemStack(Items.REDSTONE,1));
+        var saved=source.saveWithoutMetadata(level.registryAccess());
+        var box=new net.minecraft.world.phys.AABB(pos).inflate(3);
+        int before=level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,box).size();
+        old.loadWithComponents(net.minecraft.world.level.storage.TagValueInput.create(
+                new net.minecraft.util.ProblemReporter.Collector(),level.registryAccess(),saved));
+        int after=level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,box).size();
+        require(after==before,"Reload unexpectedly dropped old item stacks");
+        require(old.itemHandler.getSlots()==1 && old.itemHandler.getStackInSlot(0).is(Items.REDSTONE),
+                "Reload did not replace inventory with authoritative slot data");
+        System.out.println("HEPHAESTUS_ALPHA4 no item ejection on NBT reload OK");
+    }
+
+    private static void checkFluidTransactions() {
         int[] changes={0};
         var h=new com.titammods.common.blockentities.multiblock.SmelteryFluidHandler(
                 ()->changes[0]++);
@@ -87,7 +113,7 @@ s=s.replace(marker,"""    private static void checkFluidTransactions() {
         System.out.println("HEPHAESTUS_ALPHA4 Controller NBT roundtrip inventory, progress, fuel, molten fluid OK");
 
         BlockPos tankPos=new BlockPos(36,y,20);
-        level.setBlockAndUpdate(tankPos,ModBlocks.SEARED_TANK.get().defaultBlockState());
+        level.setBlockAndUpdate(tankPos,ModBlocks.SEARED_FUEL_TANK.get().defaultBlockState());
         require(level.getBlockEntity(tankPos) instanceof SearedTankBlockEntity,
                 "Fuel tank fixture missing");
         var tank=(SearedTankBlockEntity)level.getBlockEntity(tankPos);
