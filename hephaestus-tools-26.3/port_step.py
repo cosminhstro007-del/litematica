@@ -163,3 +163,52 @@ public final class HammerAoeRenderer {
 }
 """,encoding="utf-8")
 print("Second pass API migration applied: transformed pose matrices, inventory and renderer diagnostics.")
+
+
+# Third pass: 26.3 item quads, registries, block codec and UI APIs.
+files={
+ "client/workbench/AnimHammer.java":[
+     ("NO_TINTS, baked.quads(), ItemStackRenderState.FoilType.NONE)",
+      "NO_TINTS, net.minecraft.client.resources.model.geometry.ItemQuads.split(baked.quads()), ItemStackRenderState.FoilType.NONE)")],
+ "tables/menu/ArsenalTableMenu.java":[
+     ("blockEntity.getBlockPos().getCenter()","net.minecraft.world.phys.Vec3.atCenterOf(blockEntity.getBlockPos())")],
+ "tables/block/ArsenalTableBlock.java":[
+     ("private static final MapCodec<ArsenalTableBlock> CODEC = simpleCodec(ArsenalTableBlock::new);",""),
+     ("    @Override\n    protected MapCodec<? extends BaseEntityBlock> codec() { return CODEC; }","")],
+ "tables/screen/WorkbenchScreen.java":[
+     ("!minecraft.options.hideGui","true")],
+ "tools/nbt/ToolStack.java":[
+     ("VanillaRegistries.createLookup().lookupOrThrow(Registries.BLOCK)","net.minecraft.core.registries.BuiltInRegistries.BLOCK")],
+ "tools/item/ToolCategory.java":[
+     ("ItemAbilities.AXE_STRIP","null"),
+     ("ItemAbilities.SHOVEL_FLATTEN","null"),
+     ("ItemAbilities.HOE_TILL","null")],
+ "event/MasteryInteract.java":[
+     ("if (before.getToolModifiedState(context, ItemAbilities.HOE_TILL, true) == null) continue;", "")],
+}
+base = root/"src/main/java/com/titammods/hephaestus_tools"
+for rel,changes in files.items():
+    f=base/rel
+    s=f.read_text(encoding="utf-8")
+    for old,new in changes:
+        assert old in s, (rel,old)
+        s=s.replace(old,new)
+    f.write_text(s,encoding="utf-8")
+
+# Old ItemAbilities for till/strip/path were removed by the 26.3 block-transformer rewrite.
+# Until proper tool transformer data components are defined, do not pretend to implement
+# the old interaction logic: allow other item interactions to process normally.
+f=base/"tools/item/ModifiableItem.java"
+s=f.read_text(encoding="utf-8")
+s=s.replace("if (instance instanceof ItemStack stack && ability == ItemAbilities.HOE_TILL\n                && MasteryInteract.isCultivator(stack)) return true;", "")
+start=s.index("    @Override\n    public InteractionResult useOn(UseOnContext ctx) {")
+end=s.index("    @Override\n    public InteractionResult use(Level level, Player player, InteractionHand hand) {",start)
+s=s[:start]+"""    @Override
+    public InteractionResult useOn(UseOnContext ctx) {
+        // 26.3: old ItemAbilities are replaced by block transformer data components.
+        return InteractionResult.PASS;
+    }
+
+"""+s[end:]
+f.write_text(s,encoding="utf-8")
+print("Third pass applied: ItemQuads, block position, registry access, block codec, API removals.")
