@@ -51,7 +51,7 @@ s=j.read_text(encoding="utf-8")
 anchor="        container.registerConfig(ModConfig.Type.CLIENT, HephaestusConfig.SPEC, HephaestusConfig.FILE_NAME);"
 assert s.count(anchor)==1
 s=s.replace(anchor,anchor+"""
-        container.registerConfig(ModConfig.Type.COMMON,
+        container.registerConfig(ModConfig.Type.SYNCED,
                 com.titammods.hephaestus_tools.config.HephaestusGameplayConfig.SPEC,
                 com.titammods.hephaestus_tools.config.HephaestusGameplayConfig.FILE_NAME);""")
 j.write_text(s,encoding="utf-8")
@@ -72,4 +72,4 @@ s=j.read_text(encoding="utf-8")
 s,n=re.subn(r"(?m)^mod_version=.*$","mod_version=1.0.11-unofficial-26.3-beta4",s)
 assert n==1
 j.write_text(s,encoding="utf-8")
-print("Beta4: automatic Cultivated tool repair disabled by default, opt-in via COMMON config.")
+print("Beta4: automatic Cultivated tool repair disabled by default, opt-in via SYNCED config.")
