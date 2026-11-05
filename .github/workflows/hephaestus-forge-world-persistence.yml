@@ -68,7 +68,7 @@ jobs:
           set -euo pipefail
           cd forge-src
           timeout 110s ./gradlew --no-daemon runServer 2>&1 | tee ../boot2.log || rc=$?
-          grep -F 'HEPHAESTUS_PERSIST_VERIFIED restart passed for Forge fuel tank, casting table, controller and Tools workbench' ../boot2.log
+          grep -F 'HEPHAESTUS_PERSIST_VERIFIED restart passed for Forge fuel tank, casting table, controller and Tools iron-material workbench part' ../boot2.log
           if grep -E 'HEPHAESTUS_PERSIST_FAILED|/ERROR\]|FATAL|MixinApplyError' ../boot2.log; then
             exit 1
           fi
