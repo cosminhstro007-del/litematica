@@ -35,6 +35,17 @@ jobs:
           chmod +x gradlew
           set -o pipefail
           ./gradlew --no-daemon build --stacktrace 2>&1 | tee ../heph-build.log
+      - name: Headless client startup smoke test
+        shell: bash
+        continue-on-error: true
+        run: |
+          cd tools-src
+          set -o pipefail
+          if command -v xvfb-run >/dev/null 2>&1; then
+            timeout 100s xvfb-run -a ./gradlew --no-daemon runClient 2>&1 | tee ../heph-client.log
+          else
+            echo "Xvfb unavailable on this runner" | tee ../heph-client.log
+          fi
       - name: Dedicated server startup smoke test
         shell: bash
         continue-on-error: true
@@ -55,4 +66,5 @@ jobs:
           path: |
             heph-build.log
             heph-server.log
+            heph-client.log
             tools-src/build/libs/*.jar
