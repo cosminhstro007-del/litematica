@@ -24,6 +24,7 @@ jobs:
         run: |
           git clone --depth 1 --branch '26.1/main' https://github.com/titammods/hephaestustools.git tools-src
           python3 hephaestus-tools-26.3/port_step.py tools-src
+          python3 hephaestus-tools-26.3/fix_runtime.py tools-src
           java -version
       - name: Compile Java and build JAR
         shell: bash
