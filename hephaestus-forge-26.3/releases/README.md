@@ -17,6 +17,31 @@ dedicated development server alongside **Hephaestus Tools Beta 4**.
 - The Tools 26.3 progress was separately saved on branch
   `hephaestus-tools-26.3-beta4-snapshot`; no Tools source changed.
 
+## Additional in-world verification (2026-11-05)
+
+The validation run https://github.com/cosminhstro007-del/litematica/actions/runs/42014697711
+recompiled the unmodified release source and injected a **development-only**
+test hook *after* generating the publishable JAR. The published binary stayed
+unchanged (1,794,514 bytes).
+
+Tested on NeoForge 26.3.0.101 with Hephaestus Tools Beta4 installed:
+- Recipe registry contained 171 melting, 100 casting table, and 11 casting basin recipes.
+- HephaestusRecipeCache found the vanilla iron-pickaxe melting recipe,
+  iron-ingot cast recipe, and iron-block basin recipe.
+- Casting Table in the server world accepted molten iron and yielded iron ingot.
+- Casting Basin accepted molten iron and yielded iron block.
+- Seared Melter above a fuel tank consumed redstone with lava fuel and
+  produced molten redstone.
+- The test finished with `HEPHAESTUS_VERIFY_SUCCESS recipes, table, basin, melter`.
+- The server reached `Done (3.100s)!` with no ERROR-level log entries.
+
+**Nuance:** The server still logs 291 vanilla RecipeManager warnings
+about empty placement ingredients across Forge and Tools recipe types.
+The tests proved Forge's relevant recipes remain discoverable through
+its recipe registry and executable by the custom machines. These warnings
+are not, by themselves, proof that Forge crafting is broken; they do not
+mean all recipes or UI integrations have been manually verified.
+
 ## Current port adaptations
 - 26.3 API update for blocks, new SDL3 keyboard, renderer, inventory slots.
 - Inventory/fluid legacy internal bridges under `com.titammods.compat.port.legacy`
