@@ -2,7 +2,7 @@ name: Hephaestus Forge Alpha5 performance audit
 on:
   push:
     branches:
-      - hephaestus-forge-26.3-alpha5-hardening
+      - hephaestus-forge-26.3-alpha5-performance
     paths:
       - 'hephaestus-forge-26.3/**'
       - '!hephaestus-forge-26.3/releases/**'
@@ -117,15 +117,15 @@ jobs:
           mkdir -p hephaestus-forge-26.3/releases
           jar_file="$(find forge-src/build/libs -maxdepth 1 -name '*.jar' ! -name '*sources*' ! -name '*javadoc*' -print -quit)"
           test -s "$jar_file"
-          cp "$jar_file" hephaestus-forge-26.3/releases/HephaestusForge-26.3-Alpha5-Hardening.jar
-          unzip -tq hephaestus-forge-26.3/releases/HephaestusForge-26.3-Alpha5-Hardening.jar
+          cp "$jar_file" hephaestus-forge-26.3/releases/HephaestusForge-26.3-Alpha5-Performance.jar
+          unzip -tq hephaestus-forge-26.3/releases/HephaestusForge-26.3-Alpha5-Performance.jar
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add hephaestus-forge-26.3/releases/HephaestusForge-26.3-Alpha5-Hardening.jar
+          git add hephaestus-forge-26.3/releases/HephaestusForge-26.3-Alpha5-Performance.jar
           if ! git diff --cached --quiet; then
             git commit -m 'Publish verified Forge Alpha5 hardened runtime'
-            git pull --rebase origin hephaestus-forge-26.3-alpha5-hardening
-            git push origin HEAD:hephaestus-forge-26.3-alpha5-hardening
+            git pull --rebase origin hephaestus-forge-26.3-alpha5-performance
+            git push origin HEAD:hephaestus-forge-26.3-alpha5-performance
           else
             echo 'Existing Alpha5 release JAR is unchanged; no duplicate commit needed'
           fi
