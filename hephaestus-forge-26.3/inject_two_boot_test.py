@@ -87,8 +87,13 @@ public final class PersistenceSmokeTest {
                 var workbench=level.getBlockEntity(workbenchPos);
                 require(workbench!=null,"Tools workbench block entity missing");
                 Object input=workbench.getClass().getMethod("getInputSlots").invoke(workbench);
+                var matClass=Class.forName("com.titammods.hephaestus_tools.materials.MaterialId");
+                Object ironMaterial=matClass.getMethod("of",String.class,String.class)
+                        .invoke(null,"hephaestus_tools","iron");
+                ItemStack ironHead=(ItemStack)toolsPart.getClass()
+                        .getMethod("withMaterial",matClass).invoke(toolsPart,ironMaterial);
                 input.getClass().getMethod("setStackInSlot",int.class,ItemStack.class)
-                        .invoke(input,0,new ItemStack(toolsPart));
+                        .invoke(input,0,ironHead);
                 workbench.setChanged();
 
                 server.saveEverything(false,true,true);
@@ -137,7 +142,14 @@ public final class PersistenceSmokeTest {
                 require(part.is(BuiltInRegistries.ITEM.getValue(
                         Identifier.fromNamespaceAndPath("hephaestus_tools","pick_head"))),
                         "Tools part missing after restart");
-                System.out.println("HEPHAESTUS_PERSIST_VERIFIED restart passed for Forge fuel tank, casting table, controller and Tools workbench");
+                var matClass=Class.forName("com.titammods.hephaestus_tools.materials.MaterialId");
+                Object expectedMaterial=matClass.getMethod("of",String.class,String.class)
+                        .invoke(null,"hephaestus_tools","iron");
+                Object gotMaterial=part.getItem().getClass()
+                        .getMethod("getMaterial",ItemStack.class).invoke(part.getItem(),part);
+                require(expectedMaterial.equals(gotMaterial),
+                        "Tools part material component changed after real restart");
+                System.out.println("HEPHAESTUS_PERSIST_VERIFIED restart passed for Forge fuel tank, casting table, controller and Tools iron-material workbench part");
                 server.halt(false);
             }
         } catch (Exception e) {
