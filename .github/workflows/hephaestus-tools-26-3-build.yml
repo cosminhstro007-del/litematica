@@ -1,0 +1,44 @@
+name: Hephaestus Tools 26.3 isolated compile
+on:
+  push:
+    branches:
+      - hephaestus-tools-26.3-build
+    paths:
+      - 'hephaestus-tools-26.3/**'
+      - '.github/workflows/hephaestus-tools-26-3-build.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout isolated build scripts
+        uses: actions/checkout@v4
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Fetch original source
+        run: |
+          git clone --depth 1 --branch '26.1/main' https://github.com/titammods/hephaestustools.git tools-src
+          python3 hephaestus-tools-26.3/port_step.py tools-src
+          java -version
+      - name: Compile Java and build JAR
+        shell: bash
+        run: |
+          cd tools-src
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew --no-daemon build --stacktrace 2>&1 | tee ../heph-build.log
+      - name: Save diagnostic logs and any generated JAR
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hephaestus-tools-26-3-diagnostics
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            heph-build.log
+            tools-src/build/libs/*.jar
