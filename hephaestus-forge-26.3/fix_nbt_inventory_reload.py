@@ -54,4 +54,10 @@ new="""        int pc = Math.max(0, Math.min(slotCount, input.getIntOr("progress
 assert s.count(old)==1
 s=s.replace(old,new)
 p.write_text(s,encoding="utf-8")
+v=root/"gradle.properties"
+import re
+g=v.read_text(encoding="utf-8")
+g,num=re.subn(r"(?m)^mod_version=.*$", "mod_version=1.0.20-unofficial-26.3-alpha4",g)
+assert num==1
+v.write_text(g,encoding="utf-8")
 print("ALPHA4_HARDEN: NBT reload does not eject old inventory, gameplay shrink still drops safely, counts bounded")
