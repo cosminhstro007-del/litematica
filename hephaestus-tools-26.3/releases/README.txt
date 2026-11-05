@@ -5,5 +5,5 @@ Requires compatible Player Animation Library (26.3).
 Beta7: stale slots cleared after partial NBT load; multiple-user crafting and repeated shift clicks tested. Beta6 JEI preserved.\n          Beta4 no-auto-repair behavior preserved.
 Optional config: config/hephaestus-tools-gameplay.toml [durability] enable_passive_repair=true
 EXPERIMENTAL: Client interactions not fully validated; test in a new world.
-In-game crafting, full client interactions and Forge casting have not been verified.
+Automated server tests verified Workbench pickaxe assembly, 2-player anti-dupe, 3500-count bulk NBT, and Forge iron-part casting. Graphical client input/rendering and the full JEI interface remain unverified.
 Replace previous Hephaestus Tools JAR. Back up world before testing.
