@@ -28,6 +28,7 @@ jobs:
           git -C forge-src rev-parse HEAD | tee original-forge-revision.txt
           python3 hephaestus-forge-26.3/port_forge.py forge-src
           python3 hephaestus-forge-26.3/legacy_bridge.py forge-src
+          python3 hephaestus-forge-26.3/fix_26_3_apis.py forge-src
           cp forge-src/LICENSE forge-src/src/main/resources/LICENSE-hephaestusforge.txt
           java -version
       - name: Compile complete source on NeoForge 26.3
