@@ -109,4 +109,10 @@ repl(
         meltingScanInventoryVersion = Integer.MIN_VALUE;
         for (int i = 0; i < pc; i++) {""")
 p.write_text(s,encoding="utf-8")
-print("MELTING_PERF_LAB: active BitSet + periodic 5-tick bulk scan, 1-tick melting progress unchanged")
+v=root/"gradle.properties"
+import re
+g=v.read_text(encoding="utf-8")
+g,n=re.subn(r"(?m)^mod_version=.*$","mod_version=1.0.20-unofficial-26.3-alpha6",g)
+assert n==1
+v.write_text(g,encoding="utf-8")
+print("ALPHA6_OPTIMIZED: active BitSet + periodic 5-tick bulk scan, 1-tick melting progress unchanged")
