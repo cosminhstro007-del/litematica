@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Non-production compatibility audit of Hephaestus Forge 26.3 + Tools Beta4 + JEI.
+"""Non-production compatibility audit of Hephaestus Forge 26.3 + Tools Beta5 + JEI.
 Patches the development-only ForgeSmokeTest file and validates released class presence.
 DOES NOT CHANGE THE RELEASE JAR.
 """
@@ -41,12 +41,12 @@ with ZipFile(tools) as z:
        "META-INF/neoforge.mods.toml"
     ]
     missing=[n for n in required if n not in names]
-    assert not missing,"Tools Beta4 missing subtype JEI plugin: "+repr(missing)
+    assert not missing,"Tools Beta5 missing subtype JEI plugin: "+repr(missing)
     toml=z.read("META-INF/neoforge.mods.toml").decode()
     assert 'modId="hephaestus_tools"' in toml,toml[:300]
-    has_mixin="com/titammods/hephaestus_tools/mixin/TableBlockEntityMixin.class" in names
-    has_sync="com/titammods/hephaestus_tools/compat/jei/CastingRecipeSync.class" in names
-    print(f"HEPHAESTUS_INTEGRITY_STATIC Tools JEI subtype plugin OK; Forge part-material mixin present={has_mixin}; recipe sync present={has_sync}")
+    has_mixin="com/titammods/hephaestus_tools/mixin/CastingTableRecipeMixin.class" in names
+    assert has_mixin, "Tools Beta5 lacks casting recipe material mixin"
+    print(f"HEPHAESTUS_INTEGRITY_STATIC Tools JEI subtype plugin OK; Forge part-material recipe mixin present={has_mixin}")
 
 p=root/"src/main/java/com/titammods/compat/port/validation/ForgeSmokeTest.java"
 s=p.read_text(encoding="utf-8")
@@ -78,9 +78,11 @@ s=s.replace(anchor, """
         require(created.is(pickHead), "Forge casting table failed to produce Tools pick head");
         boolean material = created.has(materialType);
         System.out.println("HEPHAESTUS_INTEGRITY Tools pick head cast from iron: item=OK materialComponent=" + material);
-        System.out.println(material ?
-                "HEPHAESTUS_INTEGRITY Tools material integration PASS" :
-                "HEPHAESTUS_INTEGRITY Tools material integration INCOMPLETE (missing part_material on cast result)");
+        require(material, "Tools cast iron pick head missing part_material component");
+        Object partMaterial = created.get(materialType);
+        require(partMaterial != null && "hephaestus_tools:iron".equals(partMaterial.toString()),
+                "Tools cast iron pick head has incorrect material: " + partMaterial);
+        System.out.println("HEPHAESTUS_INTEGRITY Tools material integration PASS (iron part_material correct)");
         System.out.println("HEPHAESTUS_VERIFY_SUCCESS recipes, table, basin, melter");
 """)
 p.write_text(s,encoding="utf-8")
