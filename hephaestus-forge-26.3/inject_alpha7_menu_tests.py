@@ -109,7 +109,18 @@ s=s.replace(marker,"""    private static void verifyPlayerShiftClickAndBucketSaf
                 "Lava bucket disappeared: no empty bucket returned");
         require(be.fluidTank.getTotalFluid()==2000,
                 "Lava bucket failed to add exactly 1000mB");
-        require(menu.quickMoveStack(user,33).is(Items.BUCKET),
+        System.out.println("ALPHA7_DEBUG bucketDirect="+menu.bucketHandler.getStackInSlot(1)
+                +" menuSlot33="+menu.slots.get(33).getItem()
+                +" hasItem="+menu.slots.get(33).hasItem()
+                +" hasCurrent="+(menu.blockEntity.itemHandler==be.itemHandler)
+                +" playerSlot34="+menu.slots.get(34).getItem()
+                +" playerSlot69="+menu.slots.get(69).getItem()
+                +" slot34MayPlace="+menu.slots.get(34).mayPlace(new ItemStack(Items.BUCKET)));
+        var retBucket=menu.quickMoveStack(user,33);
+        System.out.println("ALPHA7_DEBUG return="+retBucket
+                +" bucketSlot="+menu.bucketHandler.getStackInSlot(1)
+                +" playerBucket0="+user.getInventory().getItem(0));
+        require(retBucket.is(Items.BUCKET),
                 "Shift-click returned empty bucket failed");
         require(menu.bucketHandler.getStackInSlot(1).isEmpty(),
                 "Empty bucket output was duplicated");
