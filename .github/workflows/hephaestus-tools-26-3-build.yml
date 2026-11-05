@@ -26,6 +26,7 @@ jobs:
           python3 hephaestus-tools-26.3/port_step.py tools-src
           python3 hephaestus-tools-26.3/fix_runtime.py tools-src
           python3 hephaestus-tools-26.3/restore_features.py tools-src
+          python3 hephaestus-tools-26.3/fix_slots.py tools-src
           java -version
       - name: Compile Java and build JAR
         shell: bash
