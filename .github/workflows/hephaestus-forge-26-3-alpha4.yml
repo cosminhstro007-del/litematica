@@ -32,6 +32,7 @@ jobs:
           python3 hephaestus-forge-26.3/fix_generated_data.py forge-src
           python3 hephaestus-forge-26.3/fix_jei_refresh.py forge-src
           python3 hephaestus-forge-26.3/fix_save_and_buckets.py forge-src
+          python3 hephaestus-forge-26.3/fix_nbt_inventory_reload.py forge-src
           cp forge-src/LICENSE forge-src/src/main/resources/LICENSE-hephaestusforge.txt
           java -version
       - name: Compile complete source on NeoForge 26.3
@@ -71,6 +72,9 @@ jobs:
             echo "Forge verification failed: actual recipes or smelting/casting did not complete."
             grep -E 'HEPHAESTUS_VERIFY|Exception|ERROR|FATAL' ../forge-server.log | tail -45 || true
             exit 1
+          fi
+          if ! grep -q 'HEPHAESTUS_ALPHA4 no item ejection on NBT reload OK' ../forge-server.log; then
+            echo "Item duplication prevention during NBT load test failed"; exit 1
           fi
           if ! grep -q 'HEPHAESTUS_ALPHA4 transactional rollback, commit and conservation OK' ../forge-server.log; then
             echo "Transaction rollback regression failed"; exit 1
