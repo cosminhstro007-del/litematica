@@ -1,0 +1,88 @@
+name: Forge Alpha7 + Tools Beta7 world restart and inventory preservation
+on:
+  push:
+    branches:
+      - hephaestus-forge-26.3-alpha7-menu-hotfix
+    paths:
+      - '.github/workflows/hephaestus-alpha7-world-restart.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout isolated port scripts
+        uses: actions/checkout@v4
+      - name: Install Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Retrieve original Hephaestus Forge 1.0.20
+        shell: bash
+        run: |
+          git clone --depth 1 --branch '26.1/main' https://github.com/titammods/hephaestusforge.git forge-src
+          git -C forge-src rev-parse HEAD | tee original-forge-revision.txt
+          python3 hephaestus-forge-26.3/port_forge.py forge-src
+          python3 hephaestus-forge-26.3/legacy_bridge.py forge-src
+          python3 hephaestus-forge-26.3/fix_26_3_apis.py forge-src
+          python3 hephaestus-forge-26.3/fix_generated_data.py forge-src
+          python3 hephaestus-forge-26.3/fix_jei_refresh.py forge-src
+          python3 hephaestus-forge-26.3/fix_save_and_buckets.py forge-src
+          python3 hephaestus-forge-26.3/fix_nbt_inventory_reload.py forge-src
+          python3 hephaestus-forge-26.3/fix_idle_performance.py forge-src
+          python3 hephaestus-forge-26.3/fix_indexed_melting.py forge-src
+          python3 hephaestus-forge-26.3/fix_menu_item_loss.py forge-src
+          cp forge-src/LICENSE forge-src/src/main/resources/LICENSE-hephaestusforge.txt
+          java -version
+      - name: Compile complete source on NeoForge 26.3
+        shell: bash
+        run: |
+          set -o pipefail
+          cd forge-src
+          chmod +x gradlew
+          ./gradlew --no-daemon build --stacktrace 2>&1 | tee ../forge-build.log
+      - name: Inject developer-only persistence fixture after release compile
+        shell: bash
+        run: |
+          python3 hephaestus-forge-26.3/inject_two_boot_test.py forge-src
+      - name: Boot 1 writes Forge/Tools machine state to actual world files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p forge-src/run/mods
+          curl -fLsS --retry 2             "https://raw.githubusercontent.com/cosminhstro007-del/litematica/hephaestus-tools-26.3-beta7-hardening/hephaestus-tools-26.3/releases/HephaestusTools-26.3-Beta7-Hardening.jar"             -o forge-src/run/mods/HephaestusTools-26.3-Beta7-Hardening.jar
+          unzip -tq forge-src/run/mods/HephaestusTools-26.3-Beta7-Hardening.jar
+          printf 'eula=true\n' > forge-src/run/eula.txt
+          printf 'online-mode=false\n' > forge-src/run/server.properties
+          cd forge-src
+          timeout 110s ./gradlew --no-daemon runServer 2>&1 | tee ../boot1.log || rc=$?
+          grep -F 'HEPHAESTUS_PERSIST_SEEDED saved world and halting' ../boot1.log
+          test -f run/.hephaestus-world-persist-stage
+          if grep -E 'HEPHAESTUS_PERSIST_FAILED|/ERROR\]|FATAL|MixinApplyError' ../boot1.log; then
+            exit 1
+          fi
+      - name: Boot 2 verifies recovered Forge/Tools blocks and quantities
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd forge-src
+          timeout 110s ./gradlew --no-daemon runServer 2>&1 | tee ../boot2.log || rc=$?
+          grep -F 'HEPHAESTUS_PERSIST_VERIFIED restart passed for Forge fuel tank, casting table, controller and Tools iron-material workbench part' ../boot2.log
+          if grep -E 'HEPHAESTUS_PERSIST_FAILED|/ERROR\]|FATAL|MixinApplyError' ../boot2.log; then
+            exit 1
+          fi
+      - name: Archive build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alpha7-beta7-two-boot-world-persistence
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            original-forge-revision.txt
+            forge-build.log
+            boot1.log
+            boot2.log
+            forge-src/build/libs/*.jar
