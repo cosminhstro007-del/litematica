@@ -10,6 +10,7 @@ s=p.read_text(encoding="utf-8")
 anchor='        System.out.println("HEPHAESTUS_VERIFY_SUCCESS recipes, table, basin, melter");'
 assert s.count(anchor)==1
 s=s.replace(anchor,"""        checkFluidTransactions();
+        checkExternalTankTransfer();
         checkBlockEntitySerialization(level,y);
         checkNoDropsOnNbtReload(level,y);
 """+anchor)
@@ -38,6 +39,32 @@ s=s.replace(marker,"""    private static void checkNoDropsOnNbtReload(ServerLeve
         require(old.itemHandler.getSlots()==1 && old.itemHandler.getStackInSlot(0).is(Items.REDSTONE),
                 "Reload did not replace inventory with authoritative slot data");
         System.out.println("HEPHAESTUS_ALPHA4 no item ejection on NBT reload OK");
+    }
+
+    // Same ResourceHandlerUtil transaction used by real pipes and fluid items.
+    private static void checkExternalTankTransfer() {
+        var source=new com.titammods.common.blockentities.TransactionalFluidTank(4000,true,true);
+        var target=new com.titammods.common.blockentities.TransactionalFluidTank(4000,true,true);
+        source.setFluid(new FluidStack(Fluids.LAVA,2100));
+        try (var tx=net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) {
+            int moved=net.neoforged.neoforge.transfer.ResourceHandlerUtil.move(
+                    source,target,fluid->true,950,tx);
+            require(moved==950,"Tank-to-tank resource transfer amount wrong");
+            require(source.getFluidAmount()==1150 && target.getFluidAmount()==950,
+                    "Tank-to-tank transfer did not conserve liquid");
+            // Abort: must roll back changes to both tanks.
+        }
+        require(source.getFluidAmount()==2100 && target.getFluidAmount()==0,
+                "Aborted tank-to-tank transfer duplicated or lost liquid");
+        try (var tx=net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) {
+            int moved=net.neoforged.neoforge.transfer.ResourceHandlerUtil.move(
+                    source,target,fluid->true,900,tx);
+            require(moved==900,"Tank-to-tank committed amount wrong");
+            tx.commit();
+        }
+        require(source.getFluidAmount()==1200 && target.getFluidAmount()==900,
+                "Committed tank-to-tank transfer conservation broken");
+        System.out.println("HEPHAESTUS_ALPHA4 external FluidResource transaction and rollback OK");
     }
 
     private static void checkFluidTransactions() {
