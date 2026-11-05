@@ -5,6 +5,8 @@ on:
       - hephaestus-forge-26.3-alpha4-hardening
     paths:
       - '.github/workflows/hephaestus-forge-world-persistence.yml'
+      - 'hephaestus-forge-26.3/inject_two_boot_test.py'
+      - 'hephaestus-forge-26.3/fix_nbt_inventory_reload.py'
 permissions:
   contents: write
 jobs:
