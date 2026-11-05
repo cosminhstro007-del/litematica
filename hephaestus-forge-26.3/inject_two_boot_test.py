@@ -61,9 +61,9 @@ public final class PersistenceSmokeTest {
 
                 level.setBlockAndUpdate(castingPos,ModBlocks.SEARED_TABLE.get().defaultBlockState());
                 var table=(TableBlockEntity)level.getBlockEntity(castingPos);
-                table.inventory.setStackInSlot(0,new ItemStack(Items.DIAMOND));
-                require(table.tank.fill(new FluidStack(moltenIron,450),
-                        IFluidHandler.FluidAction.EXECUTE)==450, "casting fluid seed failed");
+                table.inventory.setStackInSlot(0,new ItemStack(com.titammods.setup.ModItems.INGOT_CAST.get()));
+                require(table.tank.fill(new FluidStack(moltenIron,90),
+                        IFluidHandler.FluidAction.EXECUTE)==90, "casting fluid seed failed");
                 table.setChanged();
 
                 level.setBlockAndUpdate(controllerPos,ModBlocks.SMELTERY_CONTROLLER.get().defaultBlockState());
@@ -111,10 +111,10 @@ public final class PersistenceSmokeTest {
                 require(level.getBlockEntity(castingPos) instanceof TableBlockEntity,
                         "Casting table missing after restart");
                 var table=(TableBlockEntity)level.getBlockEntity(castingPos);
-                require(table.inventory.getStackInSlot(0).is(Items.DIAMOND),
+                require(table.inventory.getStackInSlot(0).is(com.titammods.setup.ModItems.INGOT_CAST.get()),
                         "Casting table inventory changed after restart");
                 require(table.tank.getFluid().is(moltenIron)
-                        && table.tank.getFluidAmount()==450,
+                        && table.tank.getFluidAmount()==90,
                         "Casting table molten iron amount changed after restart");
 
                 require(level.getBlockEntity(controllerPos) instanceof SmelteryControllerBlockEntity,
