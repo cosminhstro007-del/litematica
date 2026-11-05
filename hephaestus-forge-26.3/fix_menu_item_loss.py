@@ -170,7 +170,41 @@ s=s[:start]+"""    private void processBucket() {
 # Keep all existing menu scrolling and interaction. The hidden slot range is
 # removed; 32 virtual visible slots, 2 bucket slots, 36 player slots.
 start=s.index("    @SuppressWarnings(\"removal\")\n    @Override\n    public ItemStack quickMoveStack(")
-s=s[:start]+"""    @SuppressWarnings("removal")
+s=s[:start]+"""    /**
+     * The scrollable virtual slots are not real vanilla Container slots.
+     * Do not rely on moveItemStackTo() to interpret a large, nonstandard
+     * inventory: copy into actual player slots and shrink the source only
+     * by the amount those slots accepted. No overflow is ever discarded.
+     */
+    private boolean moveToPlayerInventorySafely(ItemStack source, int start, int end) {
+        boolean changed = false;
+        for (int i = end - 1; i >= start && !source.isEmpty(); i--) {
+            Slot target = slots.get(i);
+            if (!target.mayPlace(source)) continue;
+            ItemStack current = target.getItem();
+            if (current.isEmpty() ||
+                    !ItemStack.isSameItemSameComponents(current, source)) continue;
+            int max = Math.min(target.getMaxStackSize(source), current.getMaxStackSize());
+            int amount = Math.min(Math.max(0, max - current.getCount()), source.getCount());
+            if (amount > 0) {
+                target.set(current.copyWithCount(current.getCount() + amount));
+                source.shrink(amount);
+                changed = true;
+            }
+        }
+        for (int i = end - 1; i >= start && !source.isEmpty(); i--) {
+            Slot target = slots.get(i);
+            if (!target.mayPlace(source) || target.hasItem()) continue;
+            int amount = Math.min(target.getMaxStackSize(source), source.getCount());
+            if (amount <= 0) continue;
+            target.set(source.copyWithCount(amount));
+            source.shrink(amount);
+            changed = true;
+        }
+        return changed;
+    }
+
+    @SuppressWarnings("removal")
     @Override
     public ItemStack quickMoveStack(Player player, int index) {
         if (player.level().isClientSide() || !hasCurrentInventory(player)
@@ -188,7 +222,7 @@ s=s[:start]+"""    @SuppressWarnings("removal")
         if (original.isEmpty()) return ItemStack.EMPTY;
 
         if (index < visible || index == bucketInput || index == bucketOutput) {
-            if (!moveItemStackTo(source, playerStart, playerEnd, true))
+            if (!moveToPlayerInventorySafely(source, playerStart, playerEnd))
                 return ItemStack.EMPTY;
             slot.set(source.isEmpty() ? ItemStack.EMPTY : source);
             slot.setChanged();
