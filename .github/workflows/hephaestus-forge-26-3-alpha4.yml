@@ -101,6 +101,22 @@ jobs:
             echo "Forge+Tools failed to reach server ready phase."
             exit 1
           fi
+      - name: Publish verified Forge Alpha4 production JAR (without debug code)
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p hephaestus-forge-26.3/releases
+          jar_file="$(find forge-src/build/libs -maxdepth 1 -name '*.jar' ! -name '*sources*' ! -name '*javadoc*' -print -quit)"
+          test -s "$jar_file"
+          cp "$jar_file" hephaestus-forge-26.3/releases/HephaestusForge-26.3-Alpha4-Hardening.jar
+          unzip -tq hephaestus-forge-26.3/releases/HephaestusForge-26.3-Alpha4-Hardening.jar
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add hephaestus-forge-26.3/releases/HephaestusForge-26.3-Alpha4-Hardening.jar
+          git commit -m 'Publish verified Forge Alpha4 hardened runtime'
+          git pull --rebase origin hephaestus-forge-26.3-alpha4-hardening
+          git push origin HEAD:hephaestus-forge-26.3-alpha4-hardening
       - name: Archive build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
