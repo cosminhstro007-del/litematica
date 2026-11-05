@@ -53,7 +53,7 @@ s=s.replace(anchor,anchor+"""
         }
     }
     
-    private static <T extends net.minecraft.world.item.crafting.Recipe<?>> List<T> values(
+    private static <I extends net.minecraft.world.item.crafting.RecipeInput, T extends net.minecraft.world.item.crafting.Recipe<I>> List<T> values(
             RecipeMap map, net.minecraft.world.item.crafting.RecipeType<T> type) {
         return map.byType(type).stream().map(RecipeHolder::value).toList();
     }
