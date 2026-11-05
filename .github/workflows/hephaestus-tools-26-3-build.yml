@@ -32,6 +32,16 @@ jobs:
           chmod +x gradlew
           set -o pipefail
           ./gradlew --no-daemon build --stacktrace 2>&1 | tee ../heph-build.log
+      - name: Dedicated server startup smoke test
+        shell: bash
+        continue-on-error: true
+        run: |
+          cd tools-src
+          mkdir -p run
+          printf 'eula=true\n' > run/eula.txt
+          printf 'online-mode=false\n' > run/server.properties
+          set -o pipefail
+          timeout 130s ./gradlew --no-daemon runServer 2>&1 | tee ../heph-server.log
       - name: Save diagnostic logs and any generated JAR
         if: always()
         uses: actions/upload-artifact@v4
@@ -41,4 +51,5 @@ jobs:
           retention-days: 7
           path: |
             heph-build.log
+            heph-server.log
             tools-src/build/libs/*.jar
