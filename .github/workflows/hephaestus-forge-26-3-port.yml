@@ -39,6 +39,10 @@ jobs:
           cd forge-src
           chmod +x gradlew
           ./gradlew --no-daemon build --stacktrace 2>&1 | tee ../forge-build.log
+      - name: Inject developer-only gameplay validation into dev run
+        shell: bash
+        run: |
+          python3 hephaestus-forge-26.3/inject_smoke_test.py forge-src
       - name: Test dedicated NeoForge 26.3 with Hephaestus Tools Beta4
         shell: bash
         run: |
@@ -50,6 +54,11 @@ jobs:
           printf 'online-mode=false\n' > forge-src/run/server.properties
           cd forge-src
           timeout 90s ./gradlew --no-daemon runServer 2>&1 | tee ../forge-server.log || rc=$?
+          if ! grep -q 'HEPHAESTUS_VERIFY_SUCCESS recipes, table, basin, melter' ../forge-server.log; then
+            echo "Forge verification failed: actual recipes or smelting/casting did not complete."
+            grep -E 'HEPHAESTUS_VERIFY|Exception|ERROR|FATAL' ../forge-server.log | tail -45 || true
+            exit 1
+          fi
           if ! grep -E 'Done \([0-9.]+s\)!' ../forge-server.log; then
             echo "Forge+Tools failed to reach server ready phase."
             exit 1
