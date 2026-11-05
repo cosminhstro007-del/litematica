@@ -42,6 +42,43 @@ its recipe registry and executable by the custom machines. These warnings
 are not, by themselves, proof that Forge crafting is broken; they do not
 mean all recipes or UI integrations have been manually verified.
 
+## Triple compatibility audit: Forge + Tools Beta4 + JEI (2026-11-05)
+
+Automation: https://github.com/cosminhstro007-del/litematica/actions/runs/42016362832
+
+**Verified**
+- NeoForge 26.3.0.101 dedicated server loaded `hephaestus` (Forge Alpha1),
+  `hephaestus_tools` (Tools Beta4), and JEI `31.17.0.108`.
+- Both JARs passed ZIP and metadata checks; correct distinct mod IDs.
+- Forge JAR includes its `@JeiPlugin` class and all six categories
+  (Melter, Smeltery, Casting Table, Casting Basin, Alloy, Entity Melting).
+- Tools JAR includes its `@JeiPlugin` subtype-interpreter for part material.
+- Real Forge recipe lookups and machine tests passed:
+  171 melting, 100 table, 11 basin; molten iron -> ingot/block and
+  redstone melting -> molten redstone.
+- Actual Tools iron pick head casting recipe was found and Forge produced
+  `hephaestus_tools:pick_head`.
+
+**Confirmed functional defect**
+- That cast pick head had **no `hephaestus_tools:part_material` component**.
+  Therefore it loses the specific iron material identity.
+- The 26.3 Tools Beta4 port excludes the original
+  `TableBlockEntityMixin` material assignment and the
+  `CastingRecipeSync` entrypoint. The recreated Tools JEI plugin only
+  registers material subtype interpreters; its original runtime variant
+  enrichment/cast remapping is absent.
+- Full Forge↔Tools material-rich casting and all JEI Tools variant recipes
+  **cannot be considered integrated**. This needs an implementation fix
+  followed by client UI testing.
+
+**Limits**
+- JEI starting on a dedicated server does NOT exercise its client UI.
+  We verified plugin class presence, not live recipe-page rendering,
+  filters, client recipe synchronization or subtype selection in JEI.
+- No changes were made to Tools Beta4 or the published Forge Alpha1 jar
+  during this audit. The extra integration test was injected only into
+  a temporary development server source checkout.
+
 ## Current port adaptations
 - 26.3 API update for blocks, new SDL3 keyboard, renderer, inventory slots.
 - Inventory/fluid legacy internal bridges under `com.titammods.compat.port.legacy`
