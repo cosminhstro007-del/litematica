@@ -1,0 +1,66 @@
+name: Hephaestus Forge 26.3 experimental port
+on:
+  push:
+    branches:
+      - hephaestus-forge-26.3-port
+    paths:
+      - 'hephaestus-forge-26.3/**'
+      - '!hephaestus-forge-26.3/releases/**'
+      - '.github/workflows/hephaestus-forge-26-3-port.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout isolated port scripts
+        uses: actions/checkout@v4
+      - name: Install Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Retrieve original Hephaestus Forge 1.0.20
+        shell: bash
+        run: |
+          git clone --depth 1 --branch '26.1/main' https://github.com/titammods/hephaestusforge.git forge-src
+          git -C forge-src rev-parse HEAD | tee original-forge-revision.txt
+          python3 hephaestus-forge-26.3/port_forge.py forge-src
+          cp forge-src/LICENSE forge-src/src/main/resources/LICENSE-hephaestusforge.txt
+          java -version
+      - name: Compile complete source on NeoForge 26.3
+        shell: bash
+        run: |
+          set -o pipefail
+          cd forge-src
+          chmod +x gradlew
+          ./gradlew --no-daemon build --stacktrace 2>&1 | tee ../forge-build.log
+      - name: Publish experimental Forge JAR
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p hephaestus-forge-26.3/releases
+          jar_file="$(find forge-src/build/libs -maxdepth 1 -name '*.jar' ! -name '*sources*' ! -name '*javadoc*' -print -quit)"
+          test -s "$jar_file"
+          cp "$jar_file" hephaestus-forge-26.3/releases/HephaestusForge-26.3-Alpha1-Experimental.jar
+          unzip -tq hephaestus-forge-26.3/releases/HephaestusForge-26.3-Alpha1-Experimental.jar
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add hephaestus-forge-26.3/releases
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publish experimental Forge 26.3 JAR built from original source'
+            git push origin HEAD:hephaestus-forge-26.3-port
+          fi
+      - name: Archive build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hephaestus-forge-26-3-build
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            original-forge-revision.txt
+            forge-build.log
+            forge-src/build/libs/*.jar
