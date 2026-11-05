@@ -1,0 +1,89 @@
+name: Verify Tools Beta7 3500-count bulk inventory persistence
+on:
+  push:
+    branches:
+      - hephaestus-tools-26.3-beta7-hardening
+    paths:
+      - '.github/workflows/hephaestus-tools-beta7-bulk.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout isolated build scripts
+        uses: actions/checkout@v4
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Fetch original source
+        run: |
+          git clone --depth 1 --branch '26.1/main' https://github.com/titammods/hephaestustools.git tools-src
+          python3 hephaestus-tools-26.3/port_step.py tools-src
+          python3 hephaestus-tools-26.3/fix_runtime.py tools-src
+          python3 hephaestus-tools-26.3/restore_features.py tools-src
+          python3 hephaestus-tools-26.3/fix_slots.py tools-src
+          python3 hephaestus-tools-26.3/fix_passive_repair.py tools-src
+          python3 hephaestus-tools-26.3/fix_forge_jei.py tools-src
+          python3 hephaestus-tools-26.3/fix_jei_lifecycle.py tools-src
+          python3 hephaestus-tools-26.3/fix_workbench_nbt.py tools-src
+          java -version
+      - name: Compile Java and build JAR
+        shell: bash
+        run: |
+          cd tools-src
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew --no-daemon build --stacktrace 2>&1 | tee ../heph-build.log
+      - name: Inject developer-only Workbench and anti-duplication tests
+        shell: bash
+        run: |
+          python3 hephaestus-tools-26.3/inject_workbench_test.py tools-src
+          python3 hephaestus-tools-26.3/inject_beta7_tests.py tools-src
+          python3 hephaestus-tools-26.3/inject_bulk_validation.py tools-src
+      - name: Dedicated server test with real Hephaestus Forge
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tools-src/run/mods
+          curl -fLsS --retry 2 \
+            "https://raw.githubusercontent.com/cosminhstro007-del/litematica/hephaestus-forge-26.3-alpha3-stability/hephaestus-forge-26.3/releases/HephaestusForge-26.3-Alpha3-Stability.jar" \
+            -o tools-src/run/mods/HephaestusForge-26.3-Alpha3-Stability.jar
+          unzip -tq tools-src/run/mods/HephaestusForge-26.3-Alpha3-Stability.jar
+          printf 'eula=true\n' > tools-src/run/eula.txt
+          printf 'online-mode=false\n' > tools-src/run/server.properties
+          cd tools-src
+          timeout 95s ./gradlew --no-daemon runServer 2>&1 | tee ../heph-server.log || rc=$?
+          if ! grep -E 'Done \([0-9.]+s\)!' ../heph-server.log; then
+            echo "Joint server did not start with Forge installed"
+            exit 1
+          fi
+          for marker in \
+            'HEPHAESTUS_WORKBENCH_OK pickaxe GUI menu preview, click, material components, input consumption' \
+            'HEPHAESTUS_BETA7 Workbench partial NBT reload clears old slots OK' \
+            'HEPHAESTUS_BETA7 two-player double craft and repeated shift-click anti-dupe OK' \
+            'HEPHAESTUS_BULK_OK 3500-count Workbench input survives NBT save/load'; do
+            if ! grep -Fq "$marker" ../heph-server.log; then
+              echo "Workbench regression gate failed: $marker"
+              grep -E 'HEPHAESTUS_|Exception|ERROR' ../heph-server.log | tail -40 || true
+              exit 1
+            fi
+          done
+          if grep -Ei 'MixinApplyError|InjectionError|Injection failed|Uncaught exception' ../heph-server.log; then
+            exit 1
+          fi
+      - name: Save diagnostic logs and any generated JAR
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta7-bulk-inventory-regression
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            heph-build.log
+            heph-server.log
+            heph-client.log
+            tools-src/build/libs/*.jar
