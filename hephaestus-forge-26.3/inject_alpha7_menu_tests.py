@@ -37,7 +37,10 @@ s=s.replace(marker,"""    private static void verifyPlayerShiftClickAndBucketSaf
                 "Controller menu still creates hidden slots: "+menu.slots.size());
         // 32 virtual visible slots, then bucket input/output, then 36 player.
         final int hotbar0=34;
-        user.getInventory().setItem(0,new ItemStack(Items.IRON_ORE,64));
+        require(com.titammods.common.recipe.HephaestusRecipeCache.melting(
+                level,new ItemStack(Items.RAW_IRON)) != null,
+                "Raw iron recipe missing, controller shouldn't eat unsupported ore blocks");
+        user.getInventory().setItem(0,new ItemStack(Items.RAW_IRON,64));
         require(menu.quickMoveStack(user,hotbar0).getCount()==64,
                 "Shift-click failed to transfer iron ore");
         require(user.getInventory().getItem(0).isEmpty(),
@@ -46,7 +49,7 @@ s=s.replace(marker,"""    private static void verifyPlayerShiftClickAndBucketSaf
         for(int i=0;i<be.itemHandler.getSlots();i++) {
             ItemStack item=be.itemHandler.getStackInSlot(i);
             require(item.getCount()<=1,"Controller slot overflow");
-            if(item.is(Items.IRON_ORE)) ore+=item.getCount();
+            if(item.is(Items.RAW_IRON)) ore+=item.getCount();
         }
         require(ore==64,"ORE LOST: 64 shift-click ore input => "+ore+" ore in controller");
         System.out.println("HEPHAESTUS_ALPHA7 full 64 ore shift-click conserved in controller");
@@ -59,7 +62,7 @@ s=s.replace(marker,"""    private static void verifyPlayerShiftClickAndBucketSaf
         be.meltingTime=new int[10];
         be.meltingState=new int[10];
         menu=new com.titammods.menu.SmelteryMenu(71,user.getInventory(),be);
-        user.getInventory().setItem(0,new ItemStack(Items.IRON_ORE,64));
+        user.getInventory().setItem(0,new ItemStack(Items.RAW_IRON,64));
         require(menu.quickMoveStack(user,hotbar0).getCount()==64,
                 "Partial ore shift-click failed");
         require(user.getInventory().getItem(0).getCount()==54,
@@ -75,6 +78,12 @@ s=s.replace(marker,"""    private static void verifyPlayerShiftClickAndBucketSaf
         require(menu.quickMoveStack(user,hotbar0).isEmpty(),"Dirt falsely accepted as melting ingredient");
         require(user.getInventory().getItem(0).getCount()==64,
                 "Non-melting stack was deleted");
+        user.getInventory().setItem(0,new ItemStack(Items.IRON_ORE,64));
+        require(menu.quickMoveStack(user,hotbar0).isEmpty(),
+                "Iron ore block without a recipe was accepted");
+        require(user.getInventory().getItem(0).getCount()==64,
+                "Unsupported iron ore blocks were deleted");
+        System.out.println("HEPHAESTUS_ALPHA7 unsupported ore blocks retained");
         System.out.println("HEPHAESTUS_ALPHA7 unrelated full stack not consumed");
 
         // Verify when user has 1,000s of internal smeltery slots: menu size
