@@ -109,6 +109,7 @@ jobs:
           for marker in \
             'HEPHAESTUS_ALPHA7 full 64 ore shift-click conserved in controller' \
             'HEPHAESTUS_ALPHA7 partial stack 10 in smeltery + 54 retained' \
+            'HEPHAESTUS_ALPHA7 unsupported ore blocks retained' \
             'HEPHAESTUS_ALPHA7 unrelated full stack not consumed' \
             'HEPHAESTUS_ALPHA7 large 2048-slot GUI has constant 70 menu slots' \
             'HEPHAESTUS_ALPHA7 lava bucket shift-click returned empty bucket' \
