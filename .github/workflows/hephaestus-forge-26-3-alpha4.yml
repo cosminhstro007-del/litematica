@@ -76,6 +76,9 @@ jobs:
           if ! grep -q 'HEPHAESTUS_ALPHA4 no item ejection on NBT reload OK' ../forge-server.log; then
             echo "Item duplication prevention during NBT load test failed"; exit 1
           fi
+          if ! grep -q 'HEPHAESTUS_ALPHA4 external FluidResource transaction and rollback OK' ../forge-server.log; then
+            echo "Tank-to-tank pipe transaction conservation test failed"; exit 1
+          fi
           if ! grep -q 'HEPHAESTUS_ALPHA4 transactional rollback, commit and conservation OK' ../forge-server.log; then
             echo "Transaction rollback regression failed"; exit 1
           fi
