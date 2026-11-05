@@ -35,7 +35,7 @@ for p in blocks:
  p.write_text(s,encoding="utf-8"); n+=1
 print("Removed obsolete BaseEntityBlock codec overrides in",n,"classes")
 
-modify("setup/ModBlocks.java",lambda s:s.replace(".isViewBlocking((state, getter, pos) -> false)",".isViewBlocking(state -> false)"))
+modify("setup/ModBlocks.java",lambda s:s.replace(".isViewBlocking((state, getter, pos) -> false)",""))
 for rel in ["setup/ModFluids.java","registry/fluids/MoltenFluidSet.java"]:
  modify(rel,lambda s:s.replace(".pushReaction(PushReaction.DESTROY)",""))
  
