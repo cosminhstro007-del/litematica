@@ -1,0 +1,111 @@
+name: Hephaestus Tools 26.3 beta6 stability
+on:
+  push:
+    branches:
+      - hephaestus-tools-26.3-beta6-stability
+    paths:
+      - 'hephaestus-tools-26.3/**'
+      - '!hephaestus-tools-26.3/releases/**'
+      - '.github/workflows/hephaestus-tools-26-3-beta6.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout isolated build scripts
+        uses: actions/checkout@v4
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Fetch original source
+        run: |
+          git clone --depth 1 --branch '26.1/main' https://github.com/titammods/hephaestustools.git tools-src
+          python3 hephaestus-tools-26.3/port_step.py tools-src
+          python3 hephaestus-tools-26.3/fix_runtime.py tools-src
+          python3 hephaestus-tools-26.3/restore_features.py tools-src
+          python3 hephaestus-tools-26.3/fix_slots.py tools-src
+          python3 hephaestus-tools-26.3/fix_passive_repair.py tools-src
+          python3 hephaestus-tools-26.3/fix_forge_jei.py tools-src
+          python3 hephaestus-tools-26.3/fix_jei_lifecycle.py tools-src
+          java -version
+      - name: Compile Java and build JAR
+        shell: bash
+        run: |
+          cd tools-src
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew --no-daemon build --stacktrace 2>&1 | tee ../heph-build.log
+      - name: Headless client startup smoke test
+        shell: bash
+        continue-on-error: true
+        run: |
+          cd tools-src
+          set -o pipefail
+          if command -v xvfb-run >/dev/null 2>&1; then
+            timeout 100s xvfb-run -a ./gradlew --no-daemon runClient 2>&1 | tee ../heph-client.log
+          else
+            echo "Xvfb unavailable on this runner" | tee ../heph-client.log
+          fi
+      - name: Dedicated server test with real Hephaestus Forge
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tools-src/run/mods
+          curl -fLsS --retry 2 \
+            "https://raw.githubusercontent.com/cosminhstro007-del/litematica/hephaestus-forge-26.3-port/hephaestus-forge-26.3/releases/HephaestusForge-26.3-Alpha1-Experimental.jar" \
+            -o tools-src/run/mods/HephaestusForge-26.3-Alpha1-Experimental.jar
+          unzip -tq tools-src/run/mods/HephaestusForge-26.3-Alpha1-Experimental.jar
+          printf 'eula=true\n' > tools-src/run/eula.txt
+          printf 'online-mode=false\n' > tools-src/run/server.properties
+          cd tools-src
+          timeout 95s ./gradlew --no-daemon runServer 2>&1 | tee ../heph-server.log || rc=$?
+          if ! grep -E 'Done \([0-9.]+s\)!' ../heph-server.log; then
+            echo "Joint server did not start with Forge installed"
+            exit 1
+          fi
+          if grep -Ei 'MixinApplyError|InjectionError|Injection failed|Uncaught exception' ../heph-server.log; then
+            exit 1
+          fi
+      - name: Publish JAR for direct public download
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t jars < <(find tools-src/build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar')
+          test "${#jars[@]}" -eq 1
+          mkdir -p hephaestus-tools-26.3/releases
+          cp "${jars[0]}" hephaestus-tools-26.3/releases/HephaestusTools-26.3-Beta6-Stability.jar
+          cat > hephaestus-tools-26.3/releases/README.txt <<'EOF'
+          Unofficial Hephaestus Tools 26.3 NeoForge beta6 stability by contributor.
+          Original source/author: titammods, MIT licensed.
+          Minecraft 26.3 / NeoForge 26.3.0.101, Java 25.
+          Requires compatible Player Animation Library (26.3).
+          Beta6: JEI variants cleared across servers and material datapack changes; Beta5 casting preserved.\n          Beta4 no-auto-repair behavior preserved.
+          Optional config: config/hephaestus-tools-gameplay.toml [durability] enable_passive_repair=true
+          EXPERIMENTAL: Client interactions not fully validated; test in a new world.
+          In-game crafting, full client interactions and Forge casting have not been verified.
+          Replace previous Hephaestus Tools JAR. Back up world before testing.
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add hephaestus-tools-26.3/releases
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publish experimental Hephaestus Tools 26.3 beta6 stability JAR'
+            git pull --rebase origin hephaestus-tools-26.3-beta6-stability
+            git push origin HEAD:hephaestus-tools-26.3-beta6-stability
+          fi
+      - name: Save diagnostic logs and any generated JAR
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hephaestus-tools-26-3-diagnostics
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            heph-build.log
+            heph-server.log
+            heph-client.log
+            tools-src/build/libs/*.jar
